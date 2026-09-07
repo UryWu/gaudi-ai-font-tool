@@ -56,17 +56,17 @@
             <h4>路径配置</h4>
             <div class="path-row">
                 <label>基础模型</label>
-                <input type="text" id="baseCheckpoint" data-persist value="D:\Claudecode\字体训练\zi2zi-JiT-main\models\zi2zi-JiT-B-16.pth">
+                <input type="text" id="baseCheckpoint" data-persist value="{{ cfg_default_checkpoint }}">
                 <button class="btn-browse" onclick="browseFile('baseCheckpoint',['.pth'])">浏览</button>
             </div>
             <div class="path-row">
                 <label>源字体</label>
-                <input type="text" id="sourceFont" data-persist value="D:\Claudecode\字体训练\zi2zi-JiT-main\data\font\WenJinMinchoP0-Regular.ttf">
+                <input type="text" id="sourceFont" data-persist value="{{ cfg_default_source_font }}">
                 <button class="btn-browse" onclick="browseFile('sourceFont',['.ttf','.otf'])">浏览</button>
             </div>
             <div class="path-row">
                 <label>学习字库TTF</label>
-                <input type="text" id="refFont" data-persist value="C:\Users\chenlin\Desktop\2026工作文件\高迪书法_行书V5\OpenType-TT\高迪书法_行书V5-Regular.260415-0920.ttf">
+                <input type="text" id="refFont" data-persist value="{{ cfg_default_ref_font or '' }}">
                 <button class="btn-browse" onclick="browseFile('refFont',['.ttf','.otf'])">浏览</button>
             </div>
             <div class="path-row">

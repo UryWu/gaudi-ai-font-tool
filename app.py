@@ -8,12 +8,23 @@ import subprocess
 sys.stdout.reconfigure(encoding='utf-8')
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
-from config import HOST, PORT, DEBUG, ZI2ZI_DIR, DEFAULT_BASE_CHECKPOINT, DEFAULT_SOURCE_FONT, DEFAULT_REF_FONT, TRAIN_DEFAULTS, GENERATE_DEFAULTS
+from config import HOST, PORT, DEBUG, ZI2ZI_DIR, DEFAULT_BASE_CHECKPOINT, DEFAULT_SOURCE_FONT, DEFAULT_REF_FONT, DEFAULT_RUN_DIR, TRAIN_DEFAULTS, GENERATE_DEFAULTS
 from utils.train_manager import train_manager
 from utils.generate_manager import generate_manager
 from utils.ocr_manager import ocr_manager
 
 app = Flask(__name__)
+
+
+# 把 config 常量注入所有 Jinja2 模板，避免 HTML 里硬编码路径
+@app.context_processor
+def inject_config_defaults():
+    return dict(
+        cfg_default_checkpoint=DEFAULT_BASE_CHECKPOINT,
+        cfg_default_source_font=DEFAULT_SOURCE_FONT,
+        cfg_default_run_dir=DEFAULT_RUN_DIR,
+        cfg_default_ref_font=DEFAULT_REF_FONT,
+    )
 
 # ===== 页面路由 =====
 
