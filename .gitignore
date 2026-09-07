@@ -4,6 +4,15 @@ __pycache__/
 *.pyo
 *.egg-info/
 
+# Python 虚拟环境
+.venv/
+
+# 本地预训练模型（含分片文件，体积大，按需手动下载到 model/）
+model/
+
+# 临时探针目录（Playwright 等调试脚本）
+.tmp_pw/
+
 # 临时文件和输出
 temp/
 *.log
