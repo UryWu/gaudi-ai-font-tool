@@ -13,6 +13,11 @@ model/
 # 临时探针目录（Playwright 等调试脚本）
 .tmp_pw/
 
+# 个人字迹原稿（隐私，仅本地保留，default.ttf 已被跟踪）
+font/*.jpg
+font/*.jpeg
+font/*.png
+
 # 临时文件和输出
 temp/
 *.log
