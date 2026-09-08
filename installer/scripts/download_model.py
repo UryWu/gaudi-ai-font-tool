@@ -5,7 +5,7 @@ import argparse
 import os
 import sys
 
-RELEASE_BASE = "https://github.com/gaudi1209/ai-font-tool/releases/download/v1.0"
+RELEASE_BASE = "https://github.com/UryWu/gaudi-ai-font-tool/releases/download/v1.0"
 
 # 分片文件列表（B-16 模型因超过 GitHub 2GB 限制被拆分）
 PART_FILES = [

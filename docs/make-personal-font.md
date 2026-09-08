@@ -9,7 +9,7 @@
 | 拍照 | 手机 + 纸笔 | 手写 + 拍摄 | — | — |
 | 切割 / 校正 / 标注 / 导出 | **高迪书法字库预处理工具**（gaudi-font-preprocess） | 把书法长篇图切成单字 PNG | **7500** | https://github.com/UryWu/gaudi-font-preprocess |
 | PNG → TTF | FontLab / FontForge / fontTools | 把命好名的 PNG 合成字体文件 | — | 桌面软件 |
-| 训练 / 生成 / 验证 | **本项目**（gaudi-ai-font-tool） | LoRA 微调 + 生僻字 AI 生成 + OCR 筛选 | **7550** | https://github.com/gaudi1209/gaudi-ai-font-tool |
+| 训练 / 生成 / 验证 | **本项目**（gaudi-ai-font-tool） | LoRA 微调 + 生僻字 AI 生成 + OCR 筛选 | **7550** | https://github.com/UryWu/gaudi-ai-font-tool |
 
 > **核心要点：**
 > - **步骤 ②③④⑤** 全部在 `gaudi-font-preprocess`（端口 7500）里完成
