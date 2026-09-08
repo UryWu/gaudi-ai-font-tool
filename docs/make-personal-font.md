@@ -124,4 +124,4 @@ python app.py
 # 访问 http://localhost:7500
 ```
 
-本项目（7550）的启动方式见 [README.md](../README.md) 与项目根目录的 `start-ai-font-7550.bat`。
+本项目（7550）的启动方式见 [README.md](../README.md) 与项目根目录的 `start-ai-font-port-7550.bat`（或 PowerShell 版 `start-ai-font-port-7550.ps1`）。
