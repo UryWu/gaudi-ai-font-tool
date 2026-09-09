@@ -733,25 +733,79 @@ def _read_train_config() -> dict:
         print(f"[app] read train config failed: {e}")
     return {}
 
-def _write_train_config(data: dict):
-    """写 config.jsonc：保留 baseline 注释模板，只更新字段值
+def _jsonc_quote(v) -> str:
+    """把 Python 值转成 JSONC 行内字面量"""
+    import json
+    if isinstance(v, bool):
+        return 'true' if v else 'false'
+    if isinstance(v, str):
+        # 纯数字字符串（前端 number input 传来的是 str）→ 输出为数字字面量
+        s = v.strip()
+        if s.lstrip('-').isdigit():
+            return str(int(s))
+        try:
+            float(s)
+            return s  # 已是合法 JSON 数字文本（如 "2.6"）
+        except ValueError:
+            pass
+        return json.dumps(v, ensure_ascii=False)
+    if isinstance(v, (int, float)):
+        return str(v)
+    return 'null'
 
-    策略：读旧文件 → json5 转 dict → 合并新值 → 用 json.dump 写纯 JSON。
-    若旧文件不存在（首次），直接写纯 JSON。
+
+def _write_train_config(data: dict):
+    """写 config.jsonc：保留注释模板与字段顺序，只就地替换字段值
+
+    逐行正则替换 `"key": 旧值` → `"key": 新值`，不重排格式、不丢注释。
+    仅更新 data 里出现的 key；未提供的 key 保持原样（含注释）。
     """
+    import re
     try:
-        import json5
-        old = {}
-        if os.path.isfile(TRAIN_CONFIG_PATH):
-            with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                raw = f.read().strip()
-            # 空文件 / 纯注释 → 视为无旧配置（json5 不接受空串）
-            if raw:
-                old = json5.loads(raw) or {}
+        # 只接受标量
         clean = {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool))}
-        merged = {**old, **clean}
-        with open(TRAIN_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            json.dump(merged, f, ensure_ascii=False, indent=2)
+        if not clean:
+            return
+
+        path = TRAIN_CONFIG_PATH
+        if os.path.isfile(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        else:
+            # 文件不存在则新建一个简单 JSON 骨架
+            lines = ['{\n']
+            for k, v in clean.items():
+                lines.append(f'  "{k}": {_jsonc_quote(v)},\n')
+            lines.append('}\n')
+
+        new_lines = []
+        replaced = set()
+        for line in lines:
+            out = line
+            # 匹配形如  "key" :  value(,)
+            m = re.match(r'^(\s*)"([A-Za-z0-9_]+)"\s*:\s*', line)
+            if m:
+                key = m.group(2)
+                if key in clean:
+                    # 保留行首缩进、key、冒号、注释；只替换第一段值
+                    head = f'{m.group(1)}"{key}": {_jsonc_quote(clean[key])}'
+                    # 找行内注释（值后第一个 // 或 行尾）
+                    rest = line[m.end():]
+                    # rest 可能形如 "old_value,  // comment" 或 "old_value,\n"
+                    # 去掉旧值部分：取逗号或注释前
+                    comment = ''
+                    ci = rest.find('//')
+                    if ci >= 0:
+                        comment = rest[ci:]
+                        rest = rest[:ci]
+                    # 判断是否有逗号（rest 里去掉旧值后是否残留 ','）
+                    has_comma = ',' in rest or line.rstrip('\n').rstrip().endswith(',')
+                    out = head + (',' if has_comma else '') + (' ' + comment if comment else '') + '\n'
+                    replaced.add(key)
+            new_lines.append(out)
+
+        with open(path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
     except Exception as e:
         print(f"[app] write train config failed: {e}")
 
