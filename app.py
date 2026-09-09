@@ -8,7 +8,7 @@ import subprocess
 sys.stdout.reconfigure(encoding='utf-8')
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
-from config import HOST, PORT, DEBUG, ZI2ZI_DIR, DEFAULT_BASE_CHECKPOINT, DEFAULT_SOURCE_FONT, DEFAULT_REF_FONT, DEFAULT_RUN_DIR, TRAIN_DEFAULTS, GENERATE_DEFAULTS
+from config import HOST, PORT, DEBUG, BASE_DIR, ZI2ZI_DIR, DEFAULT_BASE_CHECKPOINT, DEFAULT_SOURCE_FONT, DEFAULT_REF_FONT, DEFAULT_RUN_DIR, TRAIN_DEFAULTS, GENERATE_DEFAULTS
 from utils.train_manager import train_manager
 from utils.generate_manager import generate_manager
 from utils.ocr_manager import ocr_manager
