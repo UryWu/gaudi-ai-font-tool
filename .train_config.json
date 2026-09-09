@@ -1,0 +1,14 @@
+{
+  "epochs": 1,
+  "batchSize": 4,
+  "loraR": 32,
+  "loraAlpha": 32,
+  "cfg": 2.6,
+  "numFonts": 1000,
+  "numChars": 200000,
+  "maxCharsPerFont": 10000,
+  "numWorkers": 0,
+  "charCountMode": "all",
+  "charCountCustom": 1000,
+  "continueEpochs": 50
+}

@@ -86,39 +86,39 @@
             <h4>训练参数</h4>
             <div class="param-row">
                 <label>Epochs</label>
-                <input type="number" id="epochs" value="200" min="1">
+                <input type="number" id="epochs" data-persist="settings" value="200" min="1">
             </div>
             <div class="param-row">
                 <label>Batch Size</label>
-                <input type="number" id="batchSize" value="64" min="1">
+                <input type="number" id="batchSize" data-persist="settings" value="64" min="1">
             </div>
             <div class="param-row">
                 <label>LoRA r</label>
-                <input type="number" id="loraR" value="32" min="1">
+                <input type="number" id="loraR" data-persist="settings" value="32" min="1">
             </div>
             <div class="param-row">
                 <label>LoRA alpha</label>
-                <input type="number" id="loraAlpha" value="32" min="1">
+                <input type="number" id="loraAlpha" data-persist="settings" value="32" min="1">
             </div>
             <div class="param-row">
                 <label>CFG</label>
-                <input type="number" id="cfg" value="2.6" step="0.1">
+                <input type="number" id="cfg" data-persist="settings" value="2.6" step="0.1">
             </div>
             <div class="param-row">
                 <label>num_fonts</label>
-                <input type="number" id="numFonts" value="1000" min="1">
+                <input type="number" id="numFonts" data-persist="settings" value="1000" min="1">
             </div>
             <div class="param-row">
                 <label>num_chars</label>
-                <input type="number" id="numChars" value="200000" min="1">
+                <input type="number" id="numChars" data-persist="settings" value="200000" min="1">
             </div>
             <div class="param-row">
                 <label>max_chars/font</label>
-                <input type="number" id="maxCharsPerFont" value="10000" min="1">
+                <input type="number" id="maxCharsPerFont" data-persist="settings" value="10000" min="1">
             </div>
             <div class="param-row">
                 <label>num_workers</label>
-                <input type="number" id="numWorkers" value="0" min="0">
+                <input type="number" id="numWorkers" data-persist="settings" value="0" min="0">
             </div>
         </div>
 
@@ -127,13 +127,13 @@
             <h4>准备数据</h4>
             <div class="param-row" style="align-items:center;gap:8px">
                 <label style="white-space:nowrap">取字数量</label>
-                <select id="charCountMode" onchange="toggleCharCountInput()" style="flex:1;padding:6px 10px;border:1px solid #ddd8d0;border-radius:4px;font-size:13px;background:#fff;color:#4a4a4a">
+                <select id="charCountMode" data-persist="settings" onchange="toggleCharCountInput()" style="flex:1;padding:6px 10px;border:1px solid #ddd8d0;border-radius:4px;font-size:13px;background:#fff;color:#4a4a4a">
                     <option value="800">800 字</option>
                     <option value="3000">3000 字</option>
                     <option value="all">全部</option>
                     <option value="custom">手动输入</option>
                 </select>
-                <input type="number" id="charCountCustom" value="1000" min="1" style="width:90px;padding:6px 10px;border:1px solid #ddd8d0;border-radius:4px;font-size:13px;display:none" placeholder="字数">
+                <input type="number" id="charCountCustom" data-persist="settings" value="1000" min="1" style="width:90px;padding:6px 10px;border:1px solid #ddd8d0;border-radius:4px;font-size:13px;display:none" placeholder="字数">
             </div>
             <div class="btn-row" style="gap:8px">
                 <button class="btn btn-secondary" onclick="prepareData()" style="flex:1">准备数据</button>
@@ -155,7 +155,7 @@
             </div>
             <div class="param-row">
                 <label>追加轮次</label>
-                <input type="number" id="continueEpochs" value="50" min="1">
+                <input type="number" id="continueEpochs" data-persist="settings" value="50" min="1">
             </div>
             <div class="btn-row">
                 <button class="btn btn-secondary" onclick="continueTraining()" style="flex:1">继续训练</button>

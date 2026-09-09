@@ -715,6 +715,40 @@ def browse_path():
     })
 
 
+# ===== 训练参数持久化 =====
+TRAIN_CONFIG_PATH = os.path.join(BASE_DIR, '.train_config.json')
+
+def _read_train_config() -> dict:
+    try:
+        if os.path.isfile(TRAIN_CONFIG_PATH):
+            with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _write_train_config(data: dict):
+    try:
+        # 只保留可序列化的标量
+        clean = {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool))}
+        with open(TRAIN_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(clean, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[app] write train config failed: {e}")
+
+@app.route('/api/train/config', methods=['GET'])
+def train_config_get():
+    return jsonify({"success": True, "config": _read_train_config()})
+
+@app.route('/api/train/config', methods=['POST'])
+def train_config_save():
+    data = request.json or {}
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "error": "payload 必须是 dict"})
+    _write_train_config(data)
+    return jsonify({"success": True, "saved": data})
+
+
 if __name__ == '__main__':
     print(f"AI字体生产工具 启动于 http://localhost:{PORT}")
     app.run(host=HOST, port=PORT, debug=DEBUG)

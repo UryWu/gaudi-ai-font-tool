@@ -116,9 +116,11 @@ function getLastPath(inputId) {
     return hist.length > 0 ? hist[0] : '';
 }
 
-// 页面加载时恢复上次路径（对带 data-persist 的输入框）
+// 页面加载时恢复上次路径（对带 data-persist="path" 或无值=data-persist 的输入框）
 function restorePaths() {
     document.querySelectorAll('input[data-persist]').forEach(input => {
+        // data-persist="settings" 走表单状态语义，不在这里处理
+        if (input.dataset.persist === 'settings') return;
         const last = getLastPath(input.id);
         if (last) {
             input.value = last;
@@ -272,3 +274,54 @@ function confirmBrowse() {
 
 // 页面加载时自动恢复路径
 document.addEventListener('DOMContentLoaded', restorePaths);
+
+// ===== 表单状态持久化（data-persist="settings"，存项目内 .train_config.json） =====
+// 通过 /api/train/config 读写，多浏览器/多设备共享
+async function restoreFormValues() {
+    try {
+        const r = await fetch('/api/train/config');
+        const d = await r.json();
+        if (!d.success) return;
+        const s = d.config || {};
+        document.querySelectorAll('[data-persist="settings"]').forEach(el => {
+            if (!(el.id in s)) return;
+            const v = s[el.id];
+            if (el.tagName === 'SELECT') {
+                el.value = v;
+            } else if (el.type === 'checkbox') {
+                el.checked = v === true || v === 'true' || v === 'on';
+            } else {
+                el.value = v;
+            }
+        });
+    } catch (e) {
+        console.warn('restoreFormValues failed:', e);
+    }
+}
+
+async function saveFormValue(id, val) {
+    try {
+        await fetch('/api/train/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [id]: val }),
+        });
+    } catch (e) {
+        console.warn('saveFormValue failed:', e);
+    }
+}
+
+// 页面加载时恢复表单状态
+document.addEventListener('DOMContentLoaded', restoreFormValues);
+// 监听所有 data-persist="settings" 元素，change/input 时保存
+document.addEventListener('change', e => {
+    if (e.target && e.target.dataset && e.target.dataset.persist === 'settings' && e.target.id) {
+        const v = (e.target.type === 'checkbox') ? e.target.checked : e.target.value;
+        saveFormValue(e.target.id, v);
+    }
+});
+document.addEventListener('input', e => {
+    if (e.target && e.target.dataset && e.target.dataset.persist === 'settings' && e.target.id) {
+        saveFormValue(e.target.id, e.target.value);
+    }
+});
