@@ -46,7 +46,7 @@
 {% block content %}
 <div class="train-layout">
     <!-- 左侧参数面板 -->
-    <div class="train-panel">
+    <div class="train-panel" id="trainPanel">
         <!-- 说明 -->
         <div style="font-size:11px;color:#8fa3b0;padding:4px 0 8px 0;border-bottom:1px solid #e0ddd8;margin-bottom:10px">
             本模型训练基于开源项目 <a href="https://github.com/kaonashi-tyc/zi2zi-JiT" target="_blank" style="color:#7ba3b0">zi2zi-JiT</a>
@@ -170,6 +170,9 @@
             <button class="nav-btn" onclick="location.href='/ocr'">OCR识别</button>
         </div>
     </div>
+
+    <!-- 拖拽分隔条 -->
+    <div class="train-splitter" id="trainSplitter" title="拖动调节左右两栏宽度"></div>
 
     <!-- 右侧监控区 -->
     <div class="train-monitor">

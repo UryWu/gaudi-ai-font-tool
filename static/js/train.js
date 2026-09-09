@@ -355,3 +355,45 @@ function autoFillCheckpoint(outputDir) {
     document.getElementById('lastCheckpoint').value = ckptPath;
     savePathHistory('lastCheckpoint', ckptPath);
 }
+
+// ===== 左右两栏拖拽分隔条 =====
+(function initTrainSplitter() {
+    const splitter = document.getElementById('trainSplitter');
+    const panel = document.getElementById('trainPanel');
+    if (!splitter || !panel) return;
+
+    const MIN = 220, MAX = 700;
+    let dragging = false;
+    let startX = 0, startW = 0;
+
+    function onDown(e) {
+        dragging = true;
+        splitter.classList.add('dragging');
+        startX = e.clientX;
+        startW = panel.getBoundingClientRect().width;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    }
+    function onMove(e) {
+        if (!dragging) return;
+        let w = startW + (e.clientX - startX);
+        if (w < MIN) w = MIN;
+        if (w > MAX) w = MAX;
+        panel.style.width = w + 'px';
+    }
+    function onUp() {
+        if (!dragging) return;
+        dragging = false;
+        splitter.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }
+    splitter.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    // 触屏兼容
+    splitter.addEventListener('touchstart', e => onDown(e.touches[0]), {passive: false});
+    window.addEventListener('touchmove', e => onMove(e.touches[0]), {passive: false});
+    window.addEventListener('touchend', onUp);
+})();
