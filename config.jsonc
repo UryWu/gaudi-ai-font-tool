@@ -1,35 +1,94 @@
 // ============================================================================
-// AI 字体训练参数持久化
+// AI 字体训练参数持久化配置文件 (JSONC)
 // ----------------------------------------------------------------------------
-// 每次 input/change 自动写盘，也可点训练页底部「保存配置」按钮手动写盘
-// 路径：项目根目录 / config.json
-// 服务启动时不读此文件——前端页面加载时调 GET /api/train/config 拉取
+// 本文件由前端训练页自动读写：
+//   - 刷新页面  → GET  /api/train/config 读取，恢复所有输入框
+//   - 修改参数  → POST /api/train/config 写入（input/change 事件自动触发）
+//   - 「保存配置」按钮 → 手动立即写盘
+// 注释格式：支持 // 行注释 和 /* 块注释 */（用 json5 库解析，见 app.py）
 // ============================================================================
 
 {
-  // ===== 路径配置 =====
-  "baseCheckpoint": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\zi2zi-JiT-B-16.pth",  // 预训练权重 2.15GB，gitignore 排除
-  "sourceFont":     "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\font\\default.ttf",                // source 通道标准字形
-  "refFont":        "",                                                                            // 学习字库 TTF（images_dir 模式时留空）
-  "imagesDir":      "",                                                                            // 字形素材目录（images_dir 模式必填）
-  "outputDir":      "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run",                    // 训练产物根目录
-  "lastCheckpoint": "",                                                                            // 继续训练 / 测试生成的 checkpoint 路径
+  // ===== 一、路径配置 =====
 
-  // ===== 训练参数（GTX 1060 6GB 已验证可用 batch=4） =====
-  "epochs":             1,    // 冒烟改 1，完整训练改 50
-  "batchSize":          4,    // 1060 6GB 硬上限 ≤4
-  "loraR":              32,   // LoRA rank（默认）
-  "loraAlpha":          32,   // LoRA alpha（与 r 相同 = 缩放系数 1）
-  "cfg":                2.6,  // classifier-free guidance 强度
-  "numFonts":           1000, // 必须 ≥ 1000（与预训练权重 shape 匹配）
-  "numChars":           200000,
-  "maxCharsPerFont":    10000,
-  "numWorkers":         0,    // 单 GPU 训练
+  "baseCheckpoint": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\zi2zi-JiT-B-16.pth",
+  // ↑ 基础模型 = 预训练权重 (2.15GB, 已 gitignore 不随仓库分发)
+  //   从 GitHub Release v1.0 分片下载后合并得到
+  //   下载参考：installer/scripts/download_model.py
 
-  // ===== 准备数据取字数量 =====
-  "charCountMode":      "all",  // 800 / 3000 / all / custom
-  "charCountCustom":    1000,   // 当 mode=custom 时用这个值
+  "sourceFont": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\font\\default.ttf",
+  // ↑ 源字体 = source 通道标准字形 (default.ttf, 已随仓库分发)
+  //   训练复合图左 1/4 用它渲染，告诉模型「要生成哪个字」
 
-  // ===== 继续训练 =====
-  "continueEpochs":     50    // 继续训练时追加的轮次数
+  "refFont": "",
+  // ↑ 学习字库 TTF（可选）
+  //   传统模式用：填了 ref_font 但没填 images_dir 时，从它渲染 target 字形
+  //   images_dir 模式（推荐）下留空即可
+
+  "imagesDir": "",
+  // ↑ 字形素材目录（images_dir 模式必填）★核心
+  //   指向 gaudi-font-preprocess「导出训练包」生成的 PNG 目录，例如：
+  //   G:\...\gaudi-font-preprocess\data\sessions\<hash>\exported\<时间戳>
+  //   要求目录内含 uniXXXX[_NN].png 命名的字形图（白底黑字, 512×512）
+  //   后端 _scan_images_dir 会自动找同目录的 source_map.json 或按文件名解析
+
+  "outputDir": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run",
+  // ↑ 输出目录 = 训练产物根目录（已 gitignore）
+  //   每次训练自动建子目录 train_images_<时间戳>/，内含:
+  //     001_font/*.png   (1024×256 复合训练图)
+  //     test.npz          (门禁文件, 训练不消费)
+  //     checkpoint-last.pth (训练完的模型, 生成页用这个)
+  //     checkpoint-best.pth
+
+  "lastCheckpoint": "",
+  // ↑ 继续训练 / 测试生成用的 checkpoint 路径
+  //   训练完成后前端会自动填入 <outputDir>/checkpoint-last.pth
+
+  // ===== 二、训练超参 =====
+
+  "epochs": 1,
+  // ↑ 训练轮数
+  //   冒烟测试: 1   |   正式训练(318字): 50 建议
+  //   单轮 ~16s/5字(1060)，正式 50 epoch 约 4-8 小时
+
+  "batchSize": 4,
+  // ↑ 批大小（★GTX 1060 6GB 硬上限 = 4）
+  //   batch=64 会触发 CUDA OOM 段错误(退出码 0xC0000005)
+  //   6GB 卡用户务必 ≤4; 显存更大可试 8/16
+
+  "loraR": 32,
+  // ↑ LoRA rank（低秩分解维度，越大容量越大但更吃显存/易过拟合）
+
+  "loraAlpha": 32,
+  // ↑ LoRA alpha（缩放系数, alpha/r 即学习强度; 默认与 r 相等 = 缩放 1）
+
+  "cfg": 2.6,
+  // ↑ classifier-free guidance 强度（训练时用, 越高生成越贴风格）
+
+  "numFonts": 1000,
+  // ↑ 字体数（★必须 ≥ 1000, 与预训练权重 font_embedding shape 匹配）
+  //   若设 1 会报: size mismatch for net.y_embedder.font_embedding.weight
+  //   实际训练数据集只有 1 个字体, 但参数需对齐预训练 1000 类
+
+  "numChars": 200000,
+  // ↑ 字符数上限（引擎内部用 num_chars 分配, 数据集小于此值自动忽略）
+
+  "maxCharsPerFont": 10000,
+  // ↑ 单字体最大字符数（兜底限制, 防止异常数据集拖垮内存）
+
+  "numWorkers": 0,
+  // ↑ 数据加载子进程数（单 GPU 用 0 最稳; Windows 下 >0 可能不稳定）
+
+  // ===== 三、准备数据：取字数量 =====
+
+  "charCountMode": "all",
+  // ↑ 取字模式: "800"=800字 | "3000"=3000字 | "all"=全部 | "custom"=自定义
+
+  "charCountCustom": 1000,
+  // ↑ 当 charCountMode="custom" 时, 用这个数量取前 N 个字
+
+  // ===== 四、继续训练 =====
+
+  "continueEpochs": 50
+  // ↑ 点「继续训练」时追加的轮次数（在已有 checkpoint-last.pth 基础上续训）
 }
