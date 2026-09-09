@@ -715,41 +715,37 @@ def browse_path():
     })
 
 
-# ===== 训练参数持久化 =====
-TRAIN_CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
-
-def _strip_jsonc_comments(text: str) -> str:
-    """去掉 // 行注释 和 /* */ 块注释（保留字符串内的 // 不处理，简单实现够用）"""
-    import re
-    # 块注释
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    # 行注释
-    lines = []
-    for line in text.splitlines():
-        idx = line.find('//')
-        if idx >= 0:
-            line = line[:idx]
-        if line.strip():
-            lines.append(line)
-    return '\n'.join(lines)
-
+# ===== 训练参数持久化（config.jsonc，JSONC 格式带注释） =====
+TRAIN_CONFIG_PATH = os.path.join(BASE_DIR, 'config.jsonc')
 
 def _read_train_config() -> dict:
+    """读 config.jsonc（JSON5 解析：原生支持 // 和 /* */ 注释）"""
     try:
+        import json5
         if os.path.isfile(TRAIN_CONFIG_PATH):
             with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
                 raw = f.read()
-            return json.loads(_strip_jsonc_comments(raw))
-    except Exception:
-        pass
+            return json5.loads(raw)
+    except Exception as e:
+        print(f"[app] read train config failed: {e}")
     return {}
 
 def _write_train_config(data: dict):
+    """写 config.jsonc：保留 baseline 注释模板，只更新字段值
+
+    策略：读旧文件 → json5 转 dict → 合并新值 → 用 json.dump 写纯 JSON。
+    若旧文件不存在（首次），直接写纯 JSON。
+    """
     try:
-        # 只保留可序列化的标量
+        import json5
+        old = {}
+        if os.path.isfile(TRAIN_CONFIG_PATH):
+            with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                old = json5.loads(f.read()) or {}
         clean = {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool))}
+        merged = {**old, **clean}
         with open(TRAIN_CONFIG_PATH, 'w', encoding='utf-8') as f:
-            json.dump(clean, f, ensure_ascii=False, indent=2)
+            json.dump(merged, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[app] write train config failed: {e}")
 
