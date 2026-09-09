@@ -32,7 +32,7 @@
   //   要求目录内含 uniXXXX[_NN].png 命名的字形图（白底黑字, 512×512）
   //   后端 _scan_images_dir 会自动找同目录的 source_map.json 或按文件名解析
 
-  "outputDir": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run\\train_images_20260910_030502",
+  "outputDir": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run",
   // ↑ 输出目录 = 训练产物根目录（已 gitignore）
   //   每次训练自动建子目录 train_images_<时间戳>/，内含:
   //     001_font/*.png   (1024×256 复合训练图)
@@ -46,7 +46,7 @@
 
   // ===== 二、训练超参 =====
 
-  "epochs": 2,
+  "epochs": 1,
   // ↑ 训练轮数
   //   冒烟测试: 1   |   正式训练(318字): 50 建议
   //   单轮 ~16s/5字(1060)，正式 50 epoch 约 4-8 小时
@@ -82,9 +82,9 @@
   // ===== 三、准备数据：取字数量 =====
 
   "charCountMode": "all",
-  // ↑ 取字模式: "800"=800字 | "3000"=3000字 | "all"=全部 | "custom"=自定义
+  // ↑ 取字模式: "800"=800字 | "3000"=3000字 | "all"=全部(推荐,自动跟随导入字形数) | "custom"=自定义
 
-  "charCountCustom": 1000,
+  "charCountCustom": 318,
   // ↑ 当 charCountMode="custom" 时, 用这个数量取前 N 个字
 
   // ===== 四、继续训练 =====

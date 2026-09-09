@@ -269,8 +269,10 @@ class TrainManager:
         self.start_time = time.time()
         self.total_epochs = params.get('epochs', 400)
 
-        # 日志文件（放在 output_dir 的同级目录，避免被训练脚本当作数据目录）
-        log_dir = os.path.join(os.path.dirname(params['output_dir']), 'logs')
+        # 日志放在批次目录内 .logs/（点前缀目录，引擎 main_jit 扫描只跳过 '.' 开头 → 不会被当字体目录）
+        # 这样每个训练批次自带日志，与脚本/UI 两入口一致、互不覆盖
+        batch_dir = params['output_dir']
+        log_dir = os.path.join(batch_dir, '.logs')
         os.makedirs(log_dir, exist_ok=True)
         self.log_path = os.path.join(log_dir, 'training.log')
         self.log_file = open(self.log_path, 'w', encoding='utf-8')

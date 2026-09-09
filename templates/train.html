@@ -75,9 +75,11 @@
                 <button class="btn-browse" onclick="browseDir('imagesDir')">浏览</button>
             </div>
             <div class="path-row">
-                <label>输出目录</label>
+                <label>输出目录（根目录）</label>
                 <input type="text" id="outputDir" data-persist="settings" value="{{ cfg_default_run_dir }}">
                 <button class="btn-browse" onclick="browseDir('outputDir')">浏览</button>
+                <!-- 隐藏字段：当前激活的训练批次目录（每次 prepare 新建，与 outputDir 解耦避免嵌套） -->
+                <input type="hidden" id="currentDataDir">
             </div>
         </div>
 

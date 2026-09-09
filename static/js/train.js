@@ -70,9 +70,9 @@ async function prepareData() {
 
         if (data.success) {
             showToast(`数据准备完成: ${data.char_count} 个字符`, 'success');
-            // 更新输出目录为新创建的时间戳目录
+            // 批次目录存入隐藏字段（不回填 outputDir，避免下次 prepare 在旧批次内再建批次）
             if (data.data_dir) {
-                document.getElementById('outputDir').value = data.data_dir;
+                document.getElementById('currentDataDir').value = data.data_dir;
             }
             document.getElementById('statusText').textContent = '数据已准备';
             appendLog(document.getElementById('logTerminal'),
@@ -83,17 +83,19 @@ async function prepareData() {
     } catch (e) { hideLoading(); }
 }
 
-// 打开准备数据目录
+// 打开准备数据目录（优先打开当前批次目录）
 function openPrepareDir() {
-    const outputDir = document.getElementById('outputDir').value;
-    if (!outputDir) {
+    const dataDir = document.getElementById('currentDataDir').value;
+    const outDir = document.getElementById('outputDir').value;
+    const path = dataDir || outDir;
+    if (!path) {
         showToast('请先填写输出目录', 'error');
         return;
     }
     fetch('/api/open_dir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: outputDir })
+        body: JSON.stringify({ path })
     })
     .then(r => r.json())
     .then(data => {
@@ -104,11 +106,14 @@ function openPrepareDir() {
 
 // 开始训练
 async function startTraining() {
+    // 训练用批次目录（currentDataDir）优先；未准备数据时退回输出根目录
+    const outDir = document.getElementById('outputDir').value;
+    const dataDir = document.getElementById('currentDataDir').value;
     const params = {
         base_checkpoint: document.getElementById('baseCheckpoint').value,
         source_font: document.getElementById('sourceFont').value,
         ref_font: document.getElementById('refFont').value,
-        output_dir: document.getElementById('outputDir').value,
+        output_dir: dataDir || outDir,
         epochs: parseInt(document.getElementById('epochs').value),
         batch_size: parseInt(document.getElementById('batchSize').value),
         lora_r: parseInt(document.getElementById('loraR').value),
@@ -121,7 +126,7 @@ async function startTraining() {
     };
 
     if (!params.base_checkpoint || !params.output_dir) {
-        showToast('请填写基础模型路径和输出目录', 'error');
+        showToast('请先点「准备数据」生成批次目录，并填基础模型路径', 'error');
         return;
     }
 
@@ -329,8 +334,9 @@ function createTestCard(item) {
 
 // ===== 回填上次训练参数 =====
 function fillLastParams(params) {
+    // 上次批次目录回填到 currentDataDir（不回填 outputDir 根框，避免嵌套）
     const fields = {
-        'outputDir': params.output_dir,
+        'currentDataDir': params.output_dir,
         'refFont': params.ref_font,
         'sourceFont': params.source_font,
     };

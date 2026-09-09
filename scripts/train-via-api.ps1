@@ -18,7 +18,7 @@ $OUTPUT_DIR = Join-Path $PROJECT 'model\run'
 $BASE_CHECKPOINT = Join-Path $PROJECT 'model\zi2zi-JiT-B-16.pth'
 
 # 取字数量（None=全部；如 50 = 前 50 字；快速冒烟用 5/10）
-$CHAR_COUNT = 5   # 冒烟改 5；完整训练改 $null
+$CHAR_COUNT = $null   # 冒烟改 5；完整训练改 $null
 
 # 训练超参
 $EPOCHS = 1       # 冒烟改 1；完整训练改 50
@@ -31,30 +31,32 @@ $NUM_CHARS = 200000
 $MAX_CHARS_PER_FONT = 10000
 $NUM_WORKERS = 0
 
-# ====== PS1 自身日志：写到 model\run\logs\ 目录下 ======
-$LogDir = Join-Path $OUTPUT_DIR 'logs'
+# ====== PS1 自身日志：写到根运行目录的 .logs\ 下 ======
+$LogDir = Join-Path $OUTPUT_DIR '.logs'
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 $Ps1LogPath = Join-Path $LogDir ("ps1_$(Get-Date -Format 'yyyyMMdd_HHmmss').log")
-# Tee-Object 同步输出到控制台 + 写文件
 Start-Transcript -Path $Ps1LogPath -Append | Out-Null
 Write-Host "PS1 日志路径: $Ps1LogPath"
 
-# 训练日志路径（Step 3 实时 tail 用）
-$EngineLogPath = Join-Path $LogDir 'training.log'
-
-# 模式选择：-TailOnly 只 tail 不重跑（看已有日志用）
+# 模式选择：-TailOnly <批次目录> 只 tail 该批次的 training.log（不重启训练）
 param(
-    [switch]$TailOnly = $false
+    [string]$TailOnly = ''
 )
 if ($TailOnly) {
-    Show-Step 'Tail 模式：实时跟踪 training.log（不重启训练）'
-    if (-not (Test-Path $EngineLogPath)) {
-        Write-Host "  训练日志不存在: $EngineLogPath" -ForegroundColor Red
+    $TargetBatch = $TailOnly
+    if (-not (Test-Path $TargetBatch)) {
+        Write-Host "  批次目录不存在: $TargetBatch" -ForegroundColor Red
         exit 1
     }
-    Get-Content $EngineLogPath -Tail 5 | ForEach-Object { Write-Host "  | $_" -ForegroundColor DarkGray }
+    $EngineLog = Join-Path $TargetBatch '.logs\training.log'
+    Show-Step "Tail 模式：跟踪批次 $TargetBatch 的 training.log"
+    if (-not (Test-Path $EngineLog)) {
+        Write-Host "  训练日志不存在: $EngineLog" -ForegroundColor Red
+        exit 1
+    }
+    Get-Content $EngineLog -Tail 5 | ForEach-Object { Write-Host "  | $_" -ForegroundColor DarkGray }
     Write-Host "  ...实时 tail 中（Ctrl+C 退出）"
-    Get-Content $EngineLogPath -Wait | ForEach-Object { Write-Host "  | $_" -ForegroundColor DarkGray }
+    Get-Content $EngineLog -Wait | ForEach-Object { Write-Host "  | $_" -ForegroundColor DarkGray }
     exit 0
 }
 
@@ -139,6 +141,9 @@ $start = $resp.Body | ConvertFrom-Json
 $start | ConvertTo-Json -Depth 5
 if (-not $start.success) { throw "启动失败: $($start.error)" }
 
+# 引擎日志现在落在批次目录内的 .logs/training.log（PS1 transcript 仍在根 .logs）
+$EngineTailPath = Join-Path $DATA_DIR '.logs\training.log'
+
 # ====== Step 3: 轮询状态 + 实时 tail 引擎日志 ======
 Show-Step 'Step 3/3: 轮询训练状态（每 5 秒 + 实时 tail 训练日志）'
 # 跟踪已打印行数，避免重复输出
@@ -152,10 +157,10 @@ while ($true) {
     Write-Host $line
 
     # 实时 tail 引擎训练日志（只打新行）
-    if ($resp_log_path -and (Test-Path $resp_log_path)) {
-        $currentLines = (Get-Content $resp_log_path -ErrorAction SilentlyContinue).Count
+    if ($EngineTailPath -and (Test-Path $EngineTailPath)) {
+        $currentLines = (Get-Content $EngineTailPath -ErrorAction SilentlyContinue).Count
         if ($currentLines -gt $PrintedLineCount) {
-            Get-Content $resp_log_path -Tail ($currentLines - $PrintedLineCount) | ForEach-Object {
+            Get-Content $EngineTailPath -Tail ($currentLines - $PrintedLineCount) | ForEach-Object {
                 Write-Host "  | $_" -ForegroundColor DarkGray
             }
             $PrintedLineCount = $currentLines
@@ -175,6 +180,6 @@ Write-Host ''
 Write-Host '训练完成。产物在:' -ForegroundColor Green
 Write-Host "  $DATA_DIR\checkpoint-last.pth"
 Write-Host "  $DATA_DIR\checkpoint-best.pth"
-Write-Host "  引擎日志: $(Split-Path $DATA_DIR -Parent)\logs\training.log"
+Write-Host "  引擎日志: $DATA_DIR\.logs\training.log"
 Write-Host "  PS1 日志: $Ps1LogPath"
 Stop-Transcript | Out-Null
