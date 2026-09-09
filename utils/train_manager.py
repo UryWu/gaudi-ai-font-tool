@@ -152,7 +152,7 @@ class TrainManager:
             self.error_message = str(e)
             return {"success": False, "error": str(e)}
 
-    def prepare_data_from_images(self, output_dir, images_dir, source_font, resolution=256, ref_size=128):
+    def prepare_data_from_images(self, output_dir, images_dir, source_font, resolution=256, ref_size=128, char_count=None):
         """准备训练数据 - 直接用外部已标好的 PNG 拼复合图（不走 ref_font 渲染）
 
         委托 utils.import_images.assemble_composites 实现。
@@ -176,6 +176,7 @@ class TrainManager:
                 output_data_dir=data_dir,
                 resolution=resolution,
                 ref_size=ref_size,
+                max_chars=char_count,
             )
             if not result or result.get('char_count', 0) == 0:
                 self.status = "error"

@@ -70,6 +70,11 @@
                 <button class="btn-browse" onclick="browseFile('refFont',['.ttf','.otf'])">浏览</button>
             </div>
             <div class="path-row">
+                <label>字形素材目录（可选，images_dir 模式）</label>
+                <input type="text" id="imagesDir" data-persist value="" placeholder="留空则走 ref_font 模式；填入则用外部 PNG 直接拼复合图">
+                <button class="btn-browse" onclick="browseDir('imagesDir')">浏览</button>
+            </div>
+            <div class="path-row">
                 <label>输出目录</label>
                 <input type="text" id="outputDir" data-persist value="{{ cfg_default_run_dir }}">
                 <button class="btn-browse" onclick="browseDir('outputDir')">浏览</button>

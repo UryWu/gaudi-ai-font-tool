@@ -41,15 +41,22 @@ function getCharCountParam() {
 
 // 准备训练数据
 async function prepareData() {
+    const imagesDirEl = document.getElementById('imagesDir');
     const params = {
         ref_font: document.getElementById('refFont').value,
         source_font: document.getElementById('sourceFont').value,
         output_dir: document.getElementById('outputDir').value,
         char_count: getCharCountParam(),
+        images_dir: imagesDirEl ? imagesDirEl.value.trim() : '',
     };
 
-    if (!params.ref_font || !params.source_font || !params.output_dir) {
-        showToast('请填写参考字体、源字体和输出目录', 'error');
+    if (!params.source_font || !params.output_dir) {
+        showToast('请填写源字体和输出目录', 'error');
+        return;
+    }
+    // images_dir 模式只需 source_font + images_dir；传统模式还需 ref_font
+    if (!params.images_dir && !params.ref_font) {
+        showToast('请填写学习字库 TTF，或填「字形素材目录」走 images_dir 模式', 'error');
         return;
     }
 
