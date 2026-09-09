@@ -26,5 +26,4 @@ try {
 finally {
     Write-Host ''
     Write-Host '服务已停止。'
-    Read-Host '按 Enter 退出'
 }
