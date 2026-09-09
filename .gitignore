@@ -32,7 +32,7 @@ desktop.ini
 .env
 
 # 训练参数本地微调（初始 baseline 已入库，本地调整不入库避免冲突）
-.train_config.json
+config.json
 
 # IDE
 .vscode/

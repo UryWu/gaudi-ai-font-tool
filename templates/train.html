@@ -56,27 +56,27 @@
             <h4>路径配置</h4>
             <div class="path-row">
                 <label>基础模型</label>
-                <input type="text" id="baseCheckpoint" data-persist value="{{ cfg_default_checkpoint }}">
+                <input type="text" id="baseCheckpoint" data-persist="settings" value="{{ cfg_default_checkpoint }}">
                 <button class="btn-browse" onclick="browseFile('baseCheckpoint',['.pth'])">浏览</button>
             </div>
             <div class="path-row">
                 <label>源字体</label>
-                <input type="text" id="sourceFont" data-persist value="{{ cfg_default_source_font }}">
+                <input type="text" id="sourceFont" data-persist="settings" value="{{ cfg_default_source_font }}">
                 <button class="btn-browse" onclick="browseFile('sourceFont',['.ttf','.otf'])">浏览</button>
             </div>
             <div class="path-row">
                 <label>学习字库TTF</label>
-                <input type="text" id="refFont" data-persist value="{{ cfg_default_ref_font or '' }}">
+                <input type="text" id="refFont" data-persist="settings" value="{{ cfg_default_ref_font or '' }}">
                 <button class="btn-browse" onclick="browseFile('refFont',['.ttf','.otf'])">浏览</button>
             </div>
             <div class="path-row">
                 <label>字形素材目录（可选，images_dir 模式）</label>
-                <input type="text" id="imagesDir" data-persist value="" placeholder="留空则走 ref_font 模式；填入则用外部 PNG 直接拼复合图">
+                <input type="text" id="imagesDir" data-persist="settings" value="" placeholder="留空则走 ref_font 模式；填入则用外部 PNG 直接拼复合图">
                 <button class="btn-browse" onclick="browseDir('imagesDir')">浏览</button>
             </div>
             <div class="path-row">
                 <label>输出目录</label>
-                <input type="text" id="outputDir" data-persist value="{{ cfg_default_run_dir }}">
+                <input type="text" id="outputDir" data-persist="settings" value="{{ cfg_default_run_dir }}">
                 <button class="btn-browse" onclick="browseDir('outputDir')">浏览</button>
             </div>
         </div>
@@ -144,13 +144,17 @@
             <button class="btn btn-primary" onclick="startTraining()">开始训练</button>
             <button class="btn btn-danger" onclick="stopTraining()">停止</button>
         </div>
+        <div class="btn-row">
+            <button class="btn btn-secondary" onclick="saveTrainConfigNow()" style="flex:1">保存配置</button>
+            <span id="trainConfigStatus" style="font-size:11px;color:#8fa3b0;align-self:center;padding:0 4px"></span>
+        </div>
 
         <!-- 继续训练 & 测试生成 -->
         <div class="param-group" style="margin-top:4px">
             <h4>继续训练 / 测试生成</h4>
             <div class="path-row">
                 <label>Checkpoint</label>
-                <input type="text" id="lastCheckpoint" data-persist placeholder="选择 checkpoint-last.pth">
+                <input type="text" id="lastCheckpoint" data-persist="settings" placeholder="选择 checkpoint-last.pth">
                 <button class="btn-browse" onclick="browseFile('lastCheckpoint',['.pth'])">浏览</button>
             </div>
             <div class="param-row">

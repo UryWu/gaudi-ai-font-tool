@@ -716,7 +716,7 @@ def browse_path():
 
 
 # ===== 训练参数持久化 =====
-TRAIN_CONFIG_PATH = os.path.join(BASE_DIR, '.train_config.json')
+TRAIN_CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
 
 def _read_train_config() -> dict:
     try:

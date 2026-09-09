@@ -313,6 +313,37 @@ async function saveFormValue(id, val) {
 
 // 页面加载时恢复表单状态
 document.addEventListener('DOMContentLoaded', restoreFormValues);
+
+// 「保存配置」按钮：把当前 panel 所有 data-persist="settings" 元素立即写盘
+async function saveTrainConfigNow() {
+    const data = {};
+    document.querySelectorAll('[data-persist="settings"]').forEach(el => {
+        if (!el.id) return;
+        const v = (el.type === 'checkbox') ? el.checked : el.value;
+        if (v !== '' && v !== undefined && v !== null) data[el.id] = v;
+    });
+    const status = document.getElementById('trainConfigStatus');
+    try {
+        const r = await fetch('/api/train/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const d = await r.json();
+        if (d.success) {
+            const n = Object.keys(data).length;
+            if (status) {
+                status.textContent = `已保存 ${n} 项 ✓`;
+                status.style.color = '#5b8c5a';
+                setTimeout(() => { status.textContent = ''; status.style.color = ''; }, 2000);
+            }
+        } else {
+            if (status) { status.textContent = '保存失败: ' + d.error; status.style.color = '#c66'; }
+        }
+    } catch (e) {
+        if (status) { status.textContent = '保存失败: ' + e.message; status.style.color = '#c66'; }
+    }
+}
 // 监听所有 data-persist="settings" 元素，change/input 时保存
 document.addEventListener('change', e => {
     if (e.target && e.target.dataset && e.target.dataset.persist === 'settings' && e.target.id) {
