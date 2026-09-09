@@ -18,10 +18,10 @@ $OUTPUT_DIR = Join-Path $PROJECT 'model\run'
 $BASE_CHECKPOINT = Join-Path $PROJECT 'model\zi2zi-JiT-B-16.pth'
 
 # 取字数量（None=全部；如 50 = 前 50 字；快速冒烟用 5/10）
-$CHAR_COUNT = $null   # 设数字可限制
+$CHAR_COUNT = 5   # 冒烟改 5；完整训练改 $null
 
 # 训练超参
-$EPOCHS = 50
+$EPOCHS = 1       # 冒烟改 1；完整训练改 50
 $BATCH_SIZE = 8
 $LORA_R = 32
 $LORA_ALPHA = 32
