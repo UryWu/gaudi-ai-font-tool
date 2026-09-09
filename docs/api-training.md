@@ -116,6 +116,12 @@ Base: `http://localhost:7550`
 powershell -ExecutionPolicy Bypass -File scripts\train-via-api.ps1
 ```
 
+**PS1 自身日志：** 脚本用 `Start-Transcript` / `Stop-Transcript` 把所有 print 输出**同步**写到：
+```
+G:\...\model\run\logs\ps1_<时间戳>.log
+```
+（不想要的话注释掉脚本头部的 `Start-Transcript` 那行）
+
 **冒烟测试（5 个字 + 1 epoch）：**
 ```powershell
 # 在脚本顶部把 $CHAR_COUNT = 5，$EPOCHS = 1
