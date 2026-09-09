@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # AI 字体生产工具 - PowerShell 启动脚本
 # 与 start-ai-font-port-7550.bat 等价，但 UTF-8 输出更稳，支持从任意目录调用
 # 用法：在 PowerShell 里执行 .\start-ai-font-port-7550.ps1
