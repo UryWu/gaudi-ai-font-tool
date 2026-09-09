@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # AI 字体训练 - API 路径（无需 UI）
 # 等价于浏览器操作，但适合脚本/远程/集成测试
 # 用法：在项目根目录 PowerShell 里运行
@@ -12,7 +12,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 $BASE = 'http://localhost:7550'
 $PROJECT = 'G:\Projects\projects_ai\gaudi-ai-font-tool'
 
-$IMAGES_DIR = 'G:\Projects\projects_ai\gaudi-font-preprocess\data\sessions\f00b32702e636da1f6f464db4edbfa3c\scaled'
+$IMAGES_DIR = 'G:\Projects\projects_ai\gaudi-font-preprocess\data\sessions\f00b32702e636da1f6f464db4edbfa3c\exported\20260910_013320'
 $SOURCE_FONT = Join-Path $PROJECT 'font\default.ttf'
 $OUTPUT_DIR = Join-Path $PROJECT 'model\run'
 $BASE_CHECKPOINT = Join-Path $PROJECT 'model\zi2zi-JiT-B-16.pth'
@@ -22,11 +22,11 @@ $CHAR_COUNT = 5   # 冒烟改 5；完整训练改 $null
 
 # 训练超参
 $EPOCHS = 1       # 冒烟改 1；完整训练改 50
-$BATCH_SIZE = 8
+$BATCH_SIZE = 4   # 冒烟时数据少，batch_size 调小避免 dataloader 末批为空
 $LORA_R = 32
 $LORA_ALPHA = 32
 $CFG = 2.6
-$NUM_FONTS = 1
+$NUM_FONTS = 1000   # 必须 >= 预训练权重里的字体数（1000），否则 font_embedding shape 不匹配
 $NUM_CHARS = 200000
 $MAX_CHARS_PER_FONT = 10000
 $NUM_WORKERS = 0
@@ -38,6 +38,25 @@ $Ps1LogPath = Join-Path $LogDir ("ps1_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
 # Tee-Object 同步输出到控制台 + 写文件
 Start-Transcript -Path $Ps1LogPath -Append | Out-Null
 Write-Host "PS1 日志路径: $Ps1LogPath"
+
+# 训练日志路径（Step 3 实时 tail 用）
+$EngineLogPath = Join-Path $LogDir 'training.log'
+
+# 模式选择：-TailOnly 只 tail 不重跑（看已有日志用）
+param(
+    [switch]$TailOnly = $false
+)
+if ($TailOnly) {
+    Show-Step 'Tail 模式：实时跟踪 training.log（不重启训练）'
+    if (-not (Test-Path $EngineLogPath)) {
+        Write-Host "  训练日志不存在: $EngineLogPath" -ForegroundColor Red
+        exit 1
+    }
+    Get-Content $EngineLogPath -Tail 5 | ForEach-Object { Write-Host "  | $_" -ForegroundColor DarkGray }
+    Write-Host "  ...实时 tail 中（Ctrl+C 退出）"
+    Get-Content $EngineLogPath -Wait | ForEach-Object { Write-Host "  | $_" -ForegroundColor DarkGray }
+    exit 0
+}
 
 # ====== 函数 ======
 function Invoke-Api($method, $path, $body) {
@@ -120,8 +139,10 @@ $start = $resp.Body | ConvertFrom-Json
 $start | ConvertTo-Json -Depth 5
 if (-not $start.success) { throw "启动失败: $($start.error)" }
 
-# ====== Step 3: 轮询状态 ======
-Show-Step 'Step 3/3: 轮询训练状态（每 5 秒）'
+# ====== Step 3: 轮询状态 + 实时 tail 引擎日志 ======
+Show-Step 'Step 3/3: 轮询训练状态（每 5 秒 + 实时 tail 训练日志）'
+# 跟踪已打印行数，避免重复输出
+$PrintedLineCount = 0
 while ($true) {
     Start-Sleep -Seconds 5
     $resp = Invoke-Api 'GET' '/api/train/status' $null
@@ -129,6 +150,18 @@ while ($true) {
     $ts = Get-Date -Format 'HH:mm:ss'
     $line = "[$ts] status=$($st.status) epoch=$($st.current_epoch)/$($st.total_epochs) loss=$($st.current_loss) lr=$($st.current_lr)"
     Write-Host $line
+
+    # 实时 tail 引擎训练日志（只打新行）
+    if ($resp_log_path -and (Test-Path $resp_log_path)) {
+        $currentLines = (Get-Content $resp_log_path -ErrorAction SilentlyContinue).Count
+        if ($currentLines -gt $PrintedLineCount) {
+            Get-Content $resp_log_path -Tail ($currentLines - $PrintedLineCount) | ForEach-Object {
+                Write-Host "  | $_" -ForegroundColor DarkGray
+            }
+            $PrintedLineCount = $currentLines
+        }
+    }
+
     if ($st.status -in @('completed', 'error', 'idle') -and $st.current_epoch -ge $EPOCHS) {
         break
     }
