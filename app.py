@@ -3,6 +3,7 @@
 
 import os
 import sys
+import json
 import subprocess
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -724,7 +725,9 @@ def _read_train_config() -> dict:
         import json5
         if os.path.isfile(TRAIN_CONFIG_PATH):
             with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                raw = f.read()
+                raw = f.read().strip()
+            if not raw:
+                return {}  # 空文件（json5 不接受空串）
             return json5.loads(raw)
     except Exception as e:
         print(f"[app] read train config failed: {e}")
@@ -741,7 +744,10 @@ def _write_train_config(data: dict):
         old = {}
         if os.path.isfile(TRAIN_CONFIG_PATH):
             with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                old = json5.loads(f.read()) or {}
+                raw = f.read().strip()
+            # 空文件 / 纯注释 → 视为无旧配置（json5 不接受空串）
+            if raw:
+                old = json5.loads(raw) or {}
         clean = {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool))}
         merged = {**old, **clean}
         with open(TRAIN_CONFIG_PATH, 'w', encoding='utf-8') as f:
