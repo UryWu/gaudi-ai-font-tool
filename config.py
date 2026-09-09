@@ -24,8 +24,8 @@ if os.path.isfile(_dotenv):
 def _env(key, default):
     return os.environ.get(key, default)
 
-# zi2zi-JiT 引擎目录（兼做本地预训练模型目录）
-ZI2ZI_DIR = _env("ZI2ZI_DIR", r"G:\Projects\projects_ai\gaudi-ai-font-tool\model")
+# zi2zi-JiT 引擎目录（源码；与 model/ 权重目录解耦）
+ZI2ZI_DIR = _env("ZI2ZI_DIR", r"G:\Projects\projects_ai\zi2zi-JiT")
 
 # Python 环境
 ZI2ZI_PYTHON = _env("ZI2ZI_PYTHON", r"G:\Projects\projects_ai\gaudi-ai-font-tool\.venv\Scripts\python.exe")
@@ -33,10 +33,11 @@ OCR_PYTHON = _env("OCR_PYTHON", r"D:\Claudecode\paddle-ocr\venv\Scripts\python.e
 SYSTEM_PYTHON = "python"
 
 # 默认路径
-DEFAULT_BASE_CHECKPOINT = os.path.join(ZI2ZI_DIR, "zi2zi-JiT-B-16.pth")
+DEFAULT_BASE_CHECKPOINT = _env("DEFAULT_BASE_CHECKPOINT",
+                                os.path.join(BASE_DIR, "model", "zi2zi-JiT-B-16.pth"))
 DEFAULT_SOURCE_FONT = _env("DEFAULT_SOURCE_FONT", os.path.join(BASE_DIR, "font", "default.ttf"))
 DEFAULT_REF_FONT = _env("DEFAULT_REF_FONT", "")
-DEFAULT_RUN_DIR = os.path.join(ZI2ZI_DIR, "run")
+DEFAULT_RUN_DIR = _env("DEFAULT_RUN_DIR", os.path.join(BASE_DIR, "model", "run"))
 
 # 训练默认参数
 TRAIN_DEFAULTS = {

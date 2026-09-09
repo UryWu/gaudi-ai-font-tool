@@ -49,17 +49,35 @@ def ocr_page():
 
 @app.route('/api/train/prepare', methods=['POST'])
 def train_prepare():
-    """准备训练数据"""
+    """准备训练数据
+
+    两种模式：
+    1) 传统模式：传 ref_font，走 GlyphRenderer 渲染 target
+    2) 注入模式：传 images_dir，直接用外部 PNG 拼复合图（utils.import_images）
+    """
     params = request.json
-    ref_font = params.get('ref_font', '')
     source_font = params.get('source_font', '')
     output_dir = params.get('output_dir', '')
     char_count = params.get('char_count')  # None=全部, 数字=限制数量
+    images_dir = params.get('images_dir', '').strip()
+    ref_font = params.get('ref_font', '').strip()
 
-    if not ref_font or not source_font or not output_dir:
-        return jsonify({"success": False, "error": "请填写完整路径"})
+    if not source_font or not output_dir:
+        return jsonify({"success": False, "error": "请填写源字体和输出目录"})
 
-    # 自动设置data_path和test_npz_path
+    # 模式 1：注入模式（images_dir 有值）
+    if images_dir:
+        if not os.path.isdir(images_dir):
+            return jsonify({"success": False, "error": f"images_dir 不存在: {images_dir}"})
+        result = train_manager.prepare_data_from_images(
+            output_dir, images_dir, source_font, char_count=char_count
+        )
+        return jsonify(result)
+
+    # 模式 2：传统模式（ref_font 必填）
+    if not ref_font:
+        return jsonify({"success": False, "error": "请填写学习字库 TTF，或改用 images_dir 模式注入外部 PNG"})
+
     result = train_manager.prepare_data(output_dir, ref_font, source_font, char_count=char_count)
     return jsonify(result)
 

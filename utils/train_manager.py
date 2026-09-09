@@ -152,6 +152,65 @@ class TrainManager:
             self.error_message = str(e)
             return {"success": False, "error": str(e)}
 
+    def prepare_data_from_images(self, output_dir, images_dir, source_font, resolution=256, ref_size=128):
+        """准备训练数据 - 直接用外部已标好的 PNG 拼复合图（不走 ref_font 渲染）
+
+        委托 utils.import_images.assemble_composites 实现。
+        产物结构与 prepare_data 一致：data_dir/001_font/*.png + data_dir/test.npz
+        """
+        self.status = "preparing"
+        self.error_message = ""
+        self.start_time = time.time()
+
+        try:
+            from utils.import_images import assemble_composites, write_test_npz
+
+            # 命名：train_images_{timestamp}，与 prepare_data 的 train_{stem}_{ts} 区别
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            data_dir = os.path.join(output_dir, f"train_images_{timestamp}")
+            os.makedirs(data_dir, exist_ok=True)
+
+            result = assemble_composites(
+                images_dir=images_dir,
+                source_font=source_font,
+                output_data_dir=data_dir,
+                resolution=resolution,
+                ref_size=ref_size,
+            )
+            if not result or result.get('char_count', 0) == 0:
+                self.status = "error"
+                self.error_message = result.get('error', '外部 PNG 组装失败：未生成任何训练样本')
+                return {"success": False, "error": self.error_message}
+
+            # test.npz（门禁需要，训练不消费）
+            try:
+                write_test_npz(data_dir, source_font, ref_font=source_font,
+                               resolution=resolution, ref_size=ref_size)
+                test_npz_path = os.path.join(data_dir, 'test.npz')
+            except Exception as e:
+                test_npz_path = None
+                print(f"[TrainManager] Warning: test.npz 生成失败: {e}")
+
+            self.status = "idle"
+            self.last_params = {
+                "output_dir": data_dir,
+                "ref_font": "",
+                "source_font": source_font,
+                "images_dir": images_dir,
+                "char_count": result['char_count'],
+            }
+            return {
+                "success": True,
+                "char_count": result['char_count'],
+                "data_dir": data_dir,
+                "test_npz": test_npz_path,
+                "skipped": result.get('skipped', 0),
+            }
+        except Exception as e:
+            self.status = "error"
+            self.error_message = str(e)
+            return {"success": False, "error": str(e)}
+
     def _create_test_npz(self, data_dir, output_path, ref_font, source_font, resolution, ref_size):
         """创建测试npz文件"""
         import numpy as np
