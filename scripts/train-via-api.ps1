@@ -31,6 +31,14 @@ $NUM_CHARS = 200000
 $MAX_CHARS_PER_FONT = 10000
 $NUM_WORKERS = 0
 
+# ====== PS1 自身日志：写到 model\run\logs\ 目录下 ======
+$LogDir = Join-Path $OUTPUT_DIR 'logs'
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+$Ps1LogPath = Join-Path $LogDir ("ps1_$(Get-Date -Format 'yyyyMMdd_HHmmss').log")
+# Tee-Object 同步输出到控制台 + 写文件
+Start-Transcript -Path $Ps1LogPath -Append | Out-Null
+Write-Host "PS1 日志路径: $Ps1LogPath"
+
 # ====== 函数 ======
 function Invoke-Api($method, $path, $body) {
     $url = "$BASE$path"
@@ -134,4 +142,6 @@ Write-Host ''
 Write-Host '训练完成。产物在:' -ForegroundColor Green
 Write-Host "  $DATA_DIR\checkpoint-last.pth"
 Write-Host "  $DATA_DIR\checkpoint-best.pth"
-Write-Host "  日志: $(Split-Path $DATA_DIR -Parent)\logs\training.log"
+Write-Host "  引擎日志: $(Split-Path $DATA_DIR -Parent)\logs\training.log"
+Write-Host "  PS1 日志: $Ps1LogPath"
+Stop-Transcript | Out-Null
