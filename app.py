@@ -718,11 +718,28 @@ def browse_path():
 # ===== 训练参数持久化 =====
 TRAIN_CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
 
+def _strip_jsonc_comments(text: str) -> str:
+    """去掉 // 行注释 和 /* */ 块注释（保留字符串内的 // 不处理，简单实现够用）"""
+    import re
+    # 块注释
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+    # 行注释
+    lines = []
+    for line in text.splitlines():
+        idx = line.find('//')
+        if idx >= 0:
+            line = line[:idx]
+        if line.strip():
+            lines.append(line)
+    return '\n'.join(lines)
+
+
 def _read_train_config() -> dict:
     try:
         if os.path.isfile(TRAIN_CONFIG_PATH):
             with open(TRAIN_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                raw = f.read()
+            return json.loads(_strip_jsonc_comments(raw))
     except Exception:
         pass
     return {}

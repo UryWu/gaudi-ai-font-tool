@@ -1,20 +1,35 @@
+// ============================================================================
+// AI 字体训练参数持久化
+// ----------------------------------------------------------------------------
+// 每次 input/change 自动写盘，也可点训练页底部「保存配置」按钮手动写盘
+// 路径：项目根目录 / config.json
+// 服务启动时不读此文件——前端页面加载时调 GET /api/train/config 拉取
+// ============================================================================
+
 {
-  "baseCheckpoint": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\zi2zi-JiT-B-16.pth",
-  "sourceFont": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\font\\default.ttf",
-  "refFont": "",
-  "imagesDir": "",
-  "outputDir": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run",
-  "lastCheckpoint": "",
-  "epochs": 1,
-  "batchSize": 4,
-  "loraR": 32,
-  "loraAlpha": 32,
-  "cfg": 2.6,
-  "numFonts": 1000,
-  "numChars": 200000,
-  "maxCharsPerFont": 10000,
-  "numWorkers": 0,
-  "charCountMode": "all",
-  "charCountCustom": 1000,
-  "continueEpochs": 50
+  // ===== 路径配置 =====
+  "baseCheckpoint": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\zi2zi-JiT-B-16.pth",  // 预训练权重 2.15GB，gitignore 排除
+  "sourceFont":     "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\font\\default.ttf",                // source 通道标准字形
+  "refFont":        "",                                                                            // 学习字库 TTF（images_dir 模式时留空）
+  "imagesDir":      "",                                                                            // 字形素材目录（images_dir 模式必填）
+  "outputDir":      "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run",                    // 训练产物根目录
+  "lastCheckpoint": "",                                                                            // 继续训练 / 测试生成的 checkpoint 路径
+
+  // ===== 训练参数（GTX 1060 6GB 已验证可用 batch=4） =====
+  "epochs":             1,    // 冒烟改 1，完整训练改 50
+  "batchSize":          4,    // 1060 6GB 硬上限 ≤4
+  "loraR":              32,   // LoRA rank（默认）
+  "loraAlpha":          32,   // LoRA alpha（与 r 相同 = 缩放系数 1）
+  "cfg":                2.6,  // classifier-free guidance 强度
+  "numFonts":           1000, // 必须 ≥ 1000（与预训练权重 shape 匹配）
+  "numChars":           200000,
+  "maxCharsPerFont":    10000,
+  "numWorkers":         0,    // 单 GPU 训练
+
+  // ===== 准备数据取字数量 =====
+  "charCountMode":      "all",  // 800 / 3000 / all / custom
+  "charCountCustom":    1000,   // 当 mode=custom 时用这个值
+
+  // ===== 继续训练 =====
+  "continueEpochs":     50    // 继续训练时追加的轮次数
 }
