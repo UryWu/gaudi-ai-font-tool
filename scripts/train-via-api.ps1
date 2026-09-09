@@ -22,7 +22,7 @@ $CHAR_COUNT = 5   # 冒烟改 5；完整训练改 $null
 
 # 训练超参
 $EPOCHS = 1       # 冒烟改 1；完整训练改 50
-$BATCH_SIZE = 4   # 冒烟时数据少，batch_size 调小避免 dataloader 末批为空
+$BATCH_SIZE = 4   # GTX 1060 6GB 跑 318 字 + LoRA r=32 必须 ≤ 4 (batch=64 触发 CUDA OOM 段错误)
 $LORA_R = 32
 $LORA_ALPHA = 32
 $CFG = 2.6

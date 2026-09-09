@@ -2,6 +2,17 @@
 
 > 第一次打开训练页时的填表说明。配合 [data-pipeline.md](data-pipeline.md) · [api-training.md](api-training.md) · [how-engine-uses-fonts.md](how-engine-uses-fonts.md)
 
+## ⚠️ 显存经验（GTX 1060 6GB）
+
+| 配置 | 状态 |
+|------|------|
+| batch_size=64, LoRA r=32, num_fonts=1000 | ❌ CUDA OOM 段错误（退出码 0xC0000005）|
+| batch_size=8, LoRA r=32, num_fonts=1000 | ❌ 显存仍爆（持续增长）|
+| **batch_size=4, LoRA r=32, num_fonts=1000** | ✅ **OK**（max mem ~1.9GB）|
+| batch_size=2 | 极保守，6GB 卡安全 |
+
+> 冒烟用 batch_size=4 跑过 5 chars / 1 epoch（16s, loss=0.0293 正常）。**GTX 1060 6GB 用户必须用 batch≤4**。
+
 ## 页面结构
 
 页面分两块：
@@ -38,7 +49,7 @@
 | 字段 | UI 默认值 | 推荐值 | 必须改？ |
 |------|----------|--------|---------|
 | **Epochs** | 200 | **1**（冒烟）/ **50**（正式训）| ✅ 必须改 |
-| **Batch Size** | 64 | **4**（318 字小数据集）/ **8**（<100 字）| ✅ 必须改（太大 → `ZeroDivisionError`）|
+| **Batch Size** | 64 | **4**（318 字小数据集）/ **8**（<100 字）| ✅ 必须改（太大 → `ZeroDivisionError`，64 在 6GB 显存会触发 CUDA OOM 段错误）|
 | **LoRA r** | 32 | 32 | 留默认 |
 | **LoRA alpha** | 32 | 32 | 留默认 |
 | **CFG** | 2.6 | 2.6 | 留默认 |
