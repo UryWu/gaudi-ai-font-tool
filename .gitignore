@@ -31,6 +31,9 @@ desktop.ini
 # 环境变量（含个人路径）
 .env
 
+# 训练参数本地微调（初始 baseline 已入库，本地调整不入库避免冲突）
+.train_config.json
+
 # IDE
 .vscode/
 .idea/
