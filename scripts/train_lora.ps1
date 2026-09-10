@@ -29,7 +29,7 @@ Write-Host "  charCountMode   'all'=全部 | 'custom'=用 charCountCustom"
 Write-Host ""
 Write-Host "日志（统一在训练批次目录内）："
 Write-Host "  引擎日志: <批次>\.logs\train_<时间戳>.log"
-Write-Host "  汇总日志: <批次>\.logs\train_summary_<时间戳>.log"
+Write-Host "  汇总日志: <批次>\.logs\summary_<时间戳>.log"
 Write-Host ""
 
 # 直接调 Python 脚本（不依赖 Flask）

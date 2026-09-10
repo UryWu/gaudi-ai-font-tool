@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File scripts\train_lora.ps1
    ├── checkpoint-last.pth          # 训练完模型（生字页用这个）
    ├── .logs/                       # ★所有训练日志统一在这里（带时间戳）
    │   ├── train_<时间戳>.log      # 引擎原始输出
-   │   └── train_summary_<时间戳>.log  # 训练脚本汇总（路径/参数/进度/用时）
+   │   └── summary_<时间戳>.log  # 训练脚本汇总（路径/参数/进度/用时）
    └── gen_<时间戳>/                # 生字产物（用该 checkpoint 生成时自动落这里）
        ├── gen_char/                # ★字形 PNG
        │   └── uniXXXX_字.png
@@ -234,7 +234,7 @@ model/run/                                       # 训练根目录（config.json
 │   ├── checkpoint-last.pth                       # 本次训练的模型
 │   ├── .logs/                                    # ★该批次所有日志
 │   │   ├── train_<时间戳>.log                   #   引擎原始日志
-│   │   └── train_summary_<时间戳>.log            #   训练脚本汇总
+│   │   └── summary_<时间戳>.log            #   训练脚本汇总
 │   └── gen_<时间戳>/                             # ★该模型生成的产物（嵌套在批次下）
 │       ├── gen_char/                             #   字形 PNG
 │       │   ├── uni4F60_你.png
@@ -245,7 +245,7 @@ model/run/                                       # 训练根目录（config.json
 └── train_images_<ts2>/                           # 训练批次 B（再训一次 = 新批次，与 A 并列）
     ├── .logs/
     │   ├── train_<时间戳>.log
-    │   └── train_summary_<时间戳>.log
+    │   └── summary_<时间戳>.log
     ├── checkpoint-last.pth
     └── gen_<时间戳>/
         ├── gen_char/
@@ -254,7 +254,7 @@ model/run/                                       # 训练根目录（config.json
 
 **核心规则：**
 1. **训练批次并列**在 `model/run/` 下，每批次一个 `train_images_<ts>/`
-2. **日志全在批次内** `<批次>/.logs/`，文件名带时间戳（`train_*` = 引擎原始，`train_summary_*` = 脚本汇总）
+2. **日志全在批次内** `<批次>/.logs/`，文件名带时间戳（`train_*` = 引擎原始，`summary_*` = 脚本汇总）
 3. **生字产物紧跟模型**：用哪个 checkpoint 生成，`gen_<ts>/` 就落在哪个批次目录下
 4. **字形图统一放 `gen_char/`**，日志统一放 `.logs/`
 5. `model/run/.logs/` 这类根级散落日志**不再产生**
