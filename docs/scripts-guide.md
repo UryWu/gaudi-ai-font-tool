@@ -50,8 +50,11 @@ powershell -ExecutionPolicy Bypass -File scripts\train_lora.ps1
    - `imagesDir`：字形素材目录（images_dir 模式必填）
    - `sourceFont`：源字体 TTF
    - `outputDir`：训练产物根目录
-   - `epochs` / `batchSize` / `loraR` / `loraAlpha` / `cfg` / `numFonts` / `numChars` / `maxCharsPerFont` / `numWorkers`
+   - `epochs`（新建训练的目标总轮次；**续训模式下被忽略**）/ `batchSize` / `loraR` / `loraAlpha` / `cfg` / `numFonts` / `numChars` / `maxCharsPerFont` / `numWorkers`
    - `charCountMode`：`"all"`=全部（推荐） / `"custom"`=用 `charCountCustom` / `"800"`/`"3000"`=前 N 字
+   - `saveLastFreq`：每 N 轮存 checkpoint（默认 1）
+   - **`resumeFrom`**：续训入口，非空=续训（详见下方第 6 点）
+   - **`continueEpochs`**：续训时追加的轮次数（续训模式下生效）
 2. 跑脚本
 3. 输出目录结构：
    ```
@@ -70,21 +73,44 @@ powershell -ExecutionPolicy Bypass -File scripts\train_lora.ps1
    ```
 4. 日志规则：**所有日志都在批次目录 `.logs/` 内，文件名带时间戳**，多次训练/续训互不覆盖，不再有 `<outputDir>/.logs/` 这样的根级散落日志。
 
-5. **Checkpoint 自动保存 + 断点续训：**
-   - **每轮都存**：`config.jsonc` 的 `saveLastFreq` 字段（默认 1）控制每 N 轮存一次 `checkpoint-last.pth`。
-     - `saveLastFreq=1`（推荐）：每轮存，10 epoch = 10 个 ckpt（每个 ~12MB LoRA），中断最多丢 1 epoch
-     - `saveLastFreq=5`（引擎默认）：10 epoch 只存 2 个 ckpt（epoch=5 和 epoch=10），中间崩了从 5 续
-   - **`checkpoint-best.pth` 关闭**（`save_best_freq=0`），不存冗余备份
-   - **断点续训机制**（`utils/train_manager.start_training` 自动检测）：
-     1. 重跑 `train_lora.ps1` 选**同一 outputDir**（脚本会落到同一 `train_images_<ts>/` 批次）
-     2. 引擎发现 `<outputDir>/train_images_<ts>/checkpoint-last.pth` 存在 → 自动加 `--resume` 参数
-     3. 读 ckpt 的 `epoch` 字段 → `total_epochs` 自动调为 `max(你设的, start_epoch + 1)`
-     4. 引擎从 `epoch+1` 继续训
-   - **显式续训示例**（如想跑 50 epoch 实际只跑了 20）：
-     1. 跑一次 `train_lora.ps1`（`epochs=50`），训练到 epoch=20 时 Ctrl+C
-     2. 修改 `config.jsonc`：`epochs=80`（或直接保留 50 让引擎从 20 → 50）
-     3. 再跑 `train_lora.ps1` → 自动从 epoch=20 续训
-   - **任何中断**（Ctrl+C / 关窗口 / 杀进程）→ 已有 `checkpoint-last.pth`（最新一轮权重）→ 下次跑自动 `--resume`
+5. **Checkpoint 自动保存**（`saveLastFreq`）：
+   - 控制每 N 轮存一次 `checkpoint-last.pth`（**固定文件名，每轮覆盖**，不产生多份）
+   - `saveLastFreq=1`（推荐，默认）：每轮覆盖 → 中断最多丢 1 轮
+   - `saveLastFreq=5`（引擎默认）：每 5 轮存一次 → 中断最多丢 4 轮
+   - 只产出 `checkpoint-last.pth`（引擎不存 best）
+
+6. **断点续训**（`resumeFrom` 字段驱动）：
+
+   **开关：** `config.jsonc` 的 `resumeFrom`
+   | `resumeFrom` | 模式 |
+   |---|---|
+   | `""`（空） | **新建训练**：prepare 新批次，从 `baseCheckpoint` 从头训 |
+   | 非空（checkpoint 路径） | **续训**：跳过 prepare，复用该 checkpoint 所在批次，`--resume` 继续训 |
+
+   **续训轮数由 `continueEpochs` 决定**（`epochs` 在续训模式下被忽略）：
+   ```
+   目标总轮次 = checkpoint 已训轮次 + continueEpochs
+   引擎 start_epoch = checkpoint.epoch + 1
+   ```
+
+   **示例：** 现有 ckpt `epoch=9`（已训 10 轮），想再训 20 轮：
+   ```jsonc
+   "resumeFrom": "G:\\...\\model\\run\\train_images_20260910_160142\\checkpoint-last.pth",
+   "continueEpochs": 20
+   ```
+   → 目标总轮次 = 10 + 20 = 30；引擎从 epoch 10 训到 29（共 20 轮）
+
+   **用 `resumeFrom` 而不是复用 `lastCheckpoint` 的原因：** `lastCheckpoint` 由训练页 UI
+   自动读写（训练完会自动填入），复用会导致「想新建训练却被静默续训、新 `imagesDir` 完全不生效」。
+   独立字段让两种意图互不干扰。
+
+   **中断恢复：** 任何中断（Ctrl+C / 关窗口 / 杀进程）后，`checkpoint-last.pth` 已是最新轮权重；
+   在 `resumeFrom` 填它、设好 `continueEpochs`，重跑 `train_lora.ps1` 即续训。
+
+   > ⚠️ 续训**不会重新准备数据**，用的是批次里已有的复合图。若新增了手写字形，应清空 `resumeFrom`
+   > 走新建训练（新批次）。
+
+   > ⚠️ 引擎需打补丁才能容忍批次目录内的 `gen_*/` 子目录，见 [engine-patch.md](engine-patch.md)。
 
 **关键经验（GTX 1060 6GB）：**
 - `batchSize ≤ 4`（batch=64 触发 CUDA OOM 段错误退出码 0xC0000005）
