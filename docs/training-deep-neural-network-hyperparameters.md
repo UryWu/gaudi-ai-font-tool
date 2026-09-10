@@ -96,9 +96,10 @@ else:
     lr = min_lr + (lr - min_lr) × 0.5 × (1 + cos(...))   # 半周期余弦退火
 ```
 
-- **warmup**：默认 **5 轮**线性升温
-- **warmup 后**：默认 `lr_schedule="constant"` → **恒定 lr**（本项目未传 `--lr_schedule`，所以走恒定额分支）
-- 引擎也支持 `cosine`，但**本项目当前没用**
+- **warmup**：默认 **5 轮**线性升温（逐 iteration 调用，`engine_jit.py:42`）
+- **warmup 后**：默认 `lr_schedule="constant"` → **恒定 lr**
+- 引擎也支持 `cosine`（半周期余弦退火，衰减到 `min_lr`）
+- 本项目已通过 `config.jsonc` 的 `lr` / `lrSchedule` / `minLr` 透传（见 §3.3）
 
 ### 3.3 ⚠️ 小显存用户的坑
 
@@ -108,11 +109,17 @@ else:
 Actual lr = 5e-5 × 4/256 = 7.81e-7      ← 比标准小 64 倍
 ```
 
-**后果：等效学习率被大幅压低 → 收敛慢**。若训练轮次有限（如 10 epoch），模型容易欠拟合。
+**后果：等效学习率被大幅压低**。
 
-**缓解手段（需改代码透传参数）：**
-- 调大 `blr`（引擎参数 `--blr`，本项目未透传）
-- 或直接传绝对 lr（引擎参数 `--lr`，会覆盖上面的缩放公式）
+**缓解手段（已透传，改 `config.jsonc` 即可）：**
+- `lr`：填**绝对 lr**（引擎 `--lr`，会覆盖上面的缩放公式）；留空 = 走 `blr × batch/256`
+- `lrSchedule` + `minLr`：改成 `cosine`，让后期 lr 衰减下来
+
+**⚠️ 实测结论见 [docs/training-experiments.md](training-experiments.md)：**
+
+batch=4 + 恒定 lr 会让 loss 陷入**极限环**（周期约 10 轮，在 0.0328~0.0358 之间规律震荡，
+"哪轮最好"纯属偶然）；改 `cosine` 后曲线变单调下降、best_loss 降 27.7% ——
+但**字形质量并未同步变好**，所以**不能只凭 loss 挑模型**。
 
 ---
 
