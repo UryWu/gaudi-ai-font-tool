@@ -48,8 +48,8 @@ CHECKPOINT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images
 #              = 引擎认字用，必须是字形数据齐全的字体
 #              = 推荐 simsunb.ttf（宋体扩展 B，3.4 万字）或 msyh.ttc（微软雅黑，3 万+字）
 #              = 不要用 default.ttf（只有约 1000 个稀疏 CJK 实际字形，常用字渲染成空白被跳过）
-REF_FONT    = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\my_personal_font.ttf"  # 个人字库（152 字）
-SOURCE_FONT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\default.ttf"            # 源字体
+REF_FONT    = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\my_personal_font.ttf"  # 个人字库（152 字，仅本地，已 gitignore）
+SOURCE_FONT = r"C:\Windows\Fonts\simfang.ttf"                                          # 源字体（仿宋，2.85万字，字形真实齐全）
 
 # —— 输入文本（三选一：优先 INPUT_TEXT_STDIN > INPUT_TEXT_FILE > INPUT_TEXT）——
 # INPUT_TEXT = "你好，世界！这是一个测试段落。     段首缩进用空格保留。"
