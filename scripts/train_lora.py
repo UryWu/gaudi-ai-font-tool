@@ -209,20 +209,66 @@ def main():
 
     log("  训练已启动（subprocess 跑引擎）", log_file)
 
-    # Step 3: 轮询状态
+    # Step 3: 轮询状态 + 引擎 batch 进度
     log("", log_file)
     log("[Step 3] 轮询训练状态（每 10 秒）...", log_file)
-    import urllib.request
+
+    # 定位批次引擎日志路径（start_training 已建 .logs/training.log）
+    engine_log_path = os.path.join(data_dir, ".logs", "training.log")
+    last_engine_lines = 0  # 跟踪已打印行数，避免重复
+
+    train_t0 = time.time()  # 训练计时
+    last_status = None      # 检测状态变化
+
     while True:
         time.sleep(10)
         status = train_manager.get_status()
         ts = time.strftime("%H:%M:%S")
-        line = f"[{ts}] status={status['status']} epoch={status['epoch']}/{status['total_epochs']} loss={status['loss']} lr={status['lr']}"
+
+        # 状态行：epoch / loss / lr + 进度条 + 预估剩余
+        cur_epoch = status["epoch"]
+        total_epoch = status["total_epochs"] or epochs
+        elapsed_train = time.time() - train_t0
+        if cur_epoch > 0 and total_epoch > 0:
+            pct = cur_epoch / total_epoch
+            bar_w = 20
+            filled = int(bar_w * pct)
+            bar = "█" * filled + "░" * (bar_w - filled)
+            eta_sec = elapsed_train * (1 - pct) / pct
+            eta_str = f"{eta_sec/60:.1f}min" if eta_sec > 60 else f"{eta_sec:.0f}s"
+            progress = f" [{bar}] {pct*100:5.1f}% 已用 {elapsed_train/60:.1f}min 估剩 {eta_str}"
+        else:
+            progress = f" 启动中... (已用 {elapsed_train/60:.1f}min)"
+
+        line = f"[{ts}] {status['status']:9s} epoch={cur_epoch:>3}/{total_epoch:<3} loss={status['loss']:.4f} lr={status['lr']:.2e}{progress}"
         print(line, flush=True)
         log_file.write(line + "\n")
         log_file.flush()
 
-        if status["status"] in ("completed", "error", "idle") and status["epoch"] >= epochs:
+        # 状态变更时打印
+        if status["status"] != last_status:
+            log(f"  >>> 状态变更: {last_status} → {status['status']}", log_file)
+            last_status = status["status"]
+
+        # 引擎训练日志 tail（只打新行，含 batch 进度如 [3/80]）
+        if os.path.isfile(engine_log_path):
+            try:
+                with open(engine_log_path, "r", encoding="utf-8", errors="replace") as f:
+                    all_lines = f.readlines()
+                if len(all_lines) > last_engine_lines:
+                    for line in all_lines[last_engine_lines:]:
+                        # 过滤 bf16/future 警告噪声，保留 Epoch / loss / data / checkpoint
+                        if any(k in line for k in ("Epoch:", "data:", "loss:", "Done!", "Total time", "checkpoint", "base lr", "Loaded")):
+                            ts_short = ts[3:]  # 简略时间
+                            engine_line = f"  │ [{ts_short}] {line.rstrip()}"
+                            print(engine_line, flush=True)
+                            log_file.write(engine_line + "\n")
+                            log_file.flush()
+                    last_engine_lines = len(all_lines)
+            except Exception as e:
+                pass
+
+        if status["status"] in ("completed", "error", "idle") and cur_epoch >= epochs:
             break
         if status["status"] == "error":
             log(f"  训练错误: {status['error_message']}", log_file)
