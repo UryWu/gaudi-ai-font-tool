@@ -14,10 +14,13 @@ model/
 .tmp_pw/
 .tmp_smoke/
 
-# 个人字迹原稿（隐私，仅本地保留，default.ttf 已被跟踪）
+# 个人字迹（隐私，仅本地保留；default.ttf 是项目自带分发字体，已被跟踪）
 font/*.jpg
 font/*.jpeg
 font/*.png
+font/my_personal_font*.ttf
+font/my_personal_font*.bak
+font/my_font*
 
 # 临时文件和输出
 temp/

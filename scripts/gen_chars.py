@@ -37,7 +37,7 @@ from pathlib import Path
 # ============================================================================
 
 # —— 模型位置（个人字迹训练产出的 checkpoint）——
-CHECKPOINT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images_20260910_031118\checkpoint-last.pth"
+CHECKPOINT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images_20260910_160142\checkpoint-last.pth"
 
 # —— REF_FONT（基本字库） vs SOURCE_FONT（源字体） ——
 # REF_FONT    = 引擎画 ref 网格（8 个"风格参考字"）时用的字体
@@ -48,8 +48,8 @@ CHECKPOINT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images
 #              = 引擎认字用，必须是字形数据齐全的字体
 #              = 推荐 simsunb.ttf（宋体扩展 B，3.4 万字）或 msyh.ttc（微软雅黑，3 万+字）
 #              = 不要用 default.ttf（只有约 1000 个稀疏 CJK 实际字形，常用字渲染成空白被跳过）
-REF_FONT    = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\default.ttf"  # TODO: 换成你的个人字库 TTF
-SOURCE_FONT = r"C:\Windows\Fonts\simsunb.ttf"                                # 宋体扩展 B，覆盖 3.4 万字
+REF_FONT    = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\my_personal_font.ttf"  # 个人字库（152 字）
+SOURCE_FONT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\default.ttf"            # 源字体
 
 # —— 输入文本（三选一：优先 INPUT_TEXT_STDIN > INPUT_TEXT_FILE > INPUT_TEXT）——
 # INPUT_TEXT = "你好，世界！这是一个测试段落。     段首缩进用空格保留。"
@@ -118,9 +118,13 @@ def build_npz(chars, ref_font, source_font, npz_path, log_file):
 
     font_labels, char_labels, content_images, style_images, unicode_labels = [], [], [], [], []
 
-    yong = src_r.render(ord('永'))
+    # ref 网格 = 风格参考，必须用 REF_FONT（个人字库）渲染「永」才有你的笔迹风格
+    yong = ref_r.render(ord('永'))
+    if yong is None or np.array(yong).mean() > 250:
+        log("  ⚠ REF_FONT 渲染「永」失败/空白，fallback 到 SOURCE_FONT（风格参考将不准确）", log_file)
+        yong = src_r.render(ord('永'))
     if yong is None:
-        raise RuntimeError(f"源字体无法渲染「永」（ref 网格兜底必需）")
+        raise RuntimeError(f"SOURCE_FONT 也无法渲染「永」（ref 网格兜底必需）")
     ref_arr = np.array(yong.resize((REF_SIZE, REF_SIZE), Image.Resampling.LANCZOS)).transpose(2, 0, 1)
 
     skipped = []
