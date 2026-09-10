@@ -133,8 +133,13 @@ def main():
     # 输出目录
     output_dir = paths["outputDir"]
 
+    # 续训入口：config.jsonc 的 resumeFrom 非空 = 续训模式（跳过 prepare，复用其所在批次）
+    # 专用字段，与 UI/生成页使用的 lastCheckpoint 解耦，避免「想新建却误续训」
+    resume_from = cfg.get("resumeFrom", "").strip()
+    add_epochs = int(cfg.get("continueEpochs", 50))  # 续训追加轮次（epochs <= ckpt epoch 时生效）
+
     log("=" * 70)
-    log("个人字库 LoRA 训练任务")
+    log("个人字库 LoRA 训练任务" + ("（续训模式）" if resume_from else ""))
     log("=" * 70)
     log(f"配置文件:    {CONFIG_PATH}")
     log(f"baseCheckpoint: {paths['baseCheckpoint']}")
@@ -147,33 +152,71 @@ def main():
     log(f"cfg={cfg_scale}, num_fonts={num_fonts}, num_chars={num_chars}")
     log(f"max_chars_per_font={max_chars_per_font}, num_workers={num_workers}")
     log(f"char_count={char_count}  (None=全部, 数字=取前 N 字)")
-
-    # 引导：images_dir 模式要求 images_dir
-    if not images_dir:
-        sys.exit("错误: imagesDir 为空，但本脚本走 images_dir 模式。编辑 config.jsonc 的 imagesDir 字段。")
-    if not Path(images_dir).is_dir():
-        sys.exit(f"错误: imagesDir 目录不存在: {images_dir}")
+    if resume_from:
+        log(f"续训入口:       {resume_from}")
+        log(f"continueEpochs: {add_epochs}  (在已训轮次基础上追加这么多轮)")
 
     # import train_manager 单例
     sys.path.insert(0, str(PROJECT_ROOT))
     from utils.train_manager import train_manager
 
-    # Step 1: prepare_data_from_images
-    log("")
-    log("[Step 1] 准备训练数据（images_dir 模式）...")
-    prep_result = train_manager.prepare_data_from_images(
-        output_dir=output_dir,
-        images_dir=images_dir,
-        source_font=paths["sourceFont"],
-        char_count=char_count,
-    )
-    if not prep_result.get("success"):
-        sys.exit(f"准备失败: {prep_result.get('error')}")
+    if resume_from:
+        # ===== 续训模式：跳过 prepare，直接复用 checkpoint 所在批次 =====
+        ckpt_path = Path(resume_from)
+        if not ckpt_path.is_file():
+            sys.exit(f"错误: 续训 checkpoint 不存在: {resume_from}")
+        data_dir = str(ckpt_path.parent)
+        test_npz = os.path.join(data_dir, "test.npz")
+        font_dir = os.path.join(data_dir, "001_font")
+        if not os.path.isdir(font_dir):
+            sys.exit(f"错误: 批次数据不完整（缺 001_font）: {font_dir}")
+        if not os.path.isfile(test_npz):
+            sys.exit(f"错误: 批次数据不完整（缺 test.npz）: {test_npz}")
 
-    data_dir = prep_result["data_dir"]
-    test_npz = prep_result.get("test_npz")
-    char_count_real = prep_result.get("char_count", 0)
-    skipped = prep_result.get("skipped", 0)
+        char_count_real = len([f for f in os.listdir(font_dir) if f.endswith(".png")])
+        skipped = 0
+
+        # 读 checkpoint 已训轮次 → 目标总轮次 = 已训 + continueEpochs
+        try:
+            import torch
+            _ck = torch.load(resume_from, map_location="cpu", weights_only=False)
+            ckpt_epoch = int(_ck.get("epoch", -1))
+            del _ck
+        except Exception as e:
+            sys.exit(f"错误: 读取 checkpoint 失败: {e}")
+        if ckpt_epoch < 0:
+            sys.exit("错误: checkpoint 无 epoch 信息，无法续训")
+        target_epochs = ckpt_epoch + 1 + add_epochs
+
+        log("")
+        log("[Step 1] 续训模式：跳过数据准备，复用已有批次")
+        log(f"  已训轮次:    {ckpt_epoch + 1} (0..{ckpt_epoch})")
+        log(f"  本次追加:    {add_epochs} 轮 (continueEpochs)")
+        log(f"  目标总轮次:  {target_epochs}")
+    else:
+        # 引导：images_dir 模式要求 images_dir
+        if not images_dir:
+            sys.exit("错误: imagesDir 为空，但本脚本走 images_dir 模式。编辑 config.jsonc 的 imagesDir 字段。")
+        if not Path(images_dir).is_dir():
+            sys.exit(f"错误: imagesDir 目录不存在: {images_dir}")
+
+        # Step 1: prepare_data_from_images
+        log("")
+        log("[Step 1] 准备训练数据（images_dir 模式）...")
+        prep_result = train_manager.prepare_data_from_images(
+            output_dir=output_dir,
+            images_dir=images_dir,
+            source_font=paths["sourceFont"],
+            char_count=char_count,
+        )
+        if not prep_result.get("success"):
+            sys.exit(f"准备失败: {prep_result.get('error')}")
+
+        data_dir = prep_result["data_dir"]
+        test_npz = prep_result.get("test_npz")
+        char_count_real = prep_result.get("char_count", 0)
+        skipped = prep_result.get("skipped", 0)
+        target_epochs = epochs  # 新建训练：epochs 即目标总轮次
 
     # 批次日志目录（所有训练日志统一进这里，带时间戳）
     ts_now = time.strftime("%Y%m%d_%H%M%S")
@@ -183,8 +226,6 @@ def main():
     log_file = open(summary_log_path, "w", encoding="utf-8")
     _flush_buffer(log_file)  # 补写前面缓存的头部信息
     log(f"批次目录: {data_dir}", log_file)
-    log(f"训练批次: train_images_{os.path.basename(data_dir).replace('train_images_', '')}", log_file)
-    log(f"引擎日志: {batch_logs_dir}/engine_{ts_now}.log", log_file)
     log(f"汇总日志: {summary_log_path}", log_file)
     log("", log_file)
     log(f"  数据目录:    {data_dir}", log_file)
@@ -201,7 +242,7 @@ def main():
         "test_npz_path": test_npz,
         "base_checkpoint": paths["baseCheckpoint"],
         "source_font": paths["sourceFont"],
-        "epochs": epochs,
+        "epochs": target_epochs,
         "batch_size": batch_size,
         "lora_r": lora_r,
         "lora_alpha": lora_alpha,
@@ -212,6 +253,8 @@ def main():
         "num_workers": num_workers,
         # 每轮都存 LoRA checkpoint，中断后最多丢 1 epoch
         "save_last_freq": int(cfg.get("saveLastFreq", 1)),
+        # 续训：target_epochs 已算好，这里传 add_epochs 仅供 train_manager 兜底
+        "add_epochs": add_epochs,
     }
     start_result = train_manager.start_training(start_params)
     if not start_result.get("success"):
@@ -219,6 +262,7 @@ def main():
         sys.exit(1)
 
     log("  训练已启动（subprocess 跑引擎）", log_file)
+    log(f"  引擎日志: {train_manager.get_status().get('log_path', '(未生成)')}", log_file)
 
     # Step 3: 轮询状态 + 引擎 batch 进度
     log("", log_file)
@@ -238,7 +282,7 @@ def main():
 
         # 状态行：epoch / loss / lr + 进度条 + 预估剩余
         cur_epoch = status["epoch"]
-        total_epoch = status["total_epochs"] or epochs
+        total_epoch = status["total_epochs"] or target_epochs
         elapsed_train = time.time() - train_t0
         if cur_epoch > 0 and total_epoch > 0:
             pct = cur_epoch / total_epoch
@@ -279,7 +323,7 @@ def main():
             except Exception as e:
                 pass
 
-        if status["status"] in ("completed", "error", "idle") and cur_epoch >= epochs:
+        if status["status"] in ("completed", "error", "idle") and cur_epoch >= target_epochs:
             break
         if status["status"] == "error":
             log(f"  训练错误: {status.get('error', '未知错误')}", log_file)

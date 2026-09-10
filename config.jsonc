@@ -41,8 +41,14 @@
   //     checkpoint-best.pth
 
   "lastCheckpoint": "",
-  // ↑ 继续训练 / 测试生成用的 checkpoint 路径
+  // ↑ 继续训练 / 测试生成用的 checkpoint 路径（UI 用，训练脚本不读它）
   //   训练完成后前端会自动填入 <outputDir>/checkpoint-last.pth
+
+  "resumeFrom": "",
+  // ↑ ★训练脚本专用的续训入口（scripts/train_lora.py）
+  //   非空 = 续训模式：跳过 prepare，复用该 checkpoint 所在批次继续训
+  //   留空 = 新建训练：prepare 新批次，从 baseCheckpoint 从头训
+  //   例：G:\...\model\run\train_images_20260910_160142\checkpoint-last.pth
 
   // ===== 二、训练超参 =====
 
@@ -92,6 +98,6 @@
 
   // ===== 四、继续训练 =====
 
-  "continueEpochs": 5
+  "continueEpochs": 1
   // ↑ 点「继续训练」时追加的轮次数（在已有 checkpoint-last.pth 基础上续训）
 }
