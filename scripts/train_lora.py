@@ -13,8 +13,8 @@
 
 输出：
   - 训练产物：<outputDir>/train_images_<时间戳>/
-  - 批次内日志：<批次>/.logs/engine_<时间戳>.log（引擎原始）
-               <批次>/.logs/summary_<时间戳>.log（本脚本汇总）
+  - 批次内日志：<批次>/.logs/train_<时间戳>.log（引擎原始）
+               <批次>/.logs/train_summary_<时间戳>.log（本脚本汇总）
 
 依赖：
   - config.jsonc（项目根）
@@ -222,7 +222,7 @@ def main():
     ts_now = time.strftime("%Y%m%d_%H%M%S")
     batch_logs_dir = Path(data_dir) / ".logs"
     batch_logs_dir.mkdir(parents=True, exist_ok=True)
-    summary_log_path = batch_logs_dir / f"summary_{ts_now}.log"
+    summary_log_path = batch_logs_dir / f"train_summary_{ts_now}.log"
     log_file = open(summary_log_path, "w", encoding="utf-8")
     _flush_buffer(log_file)  # 补写前面缓存的头部信息
     log(f"批次目录: {data_dir}", log_file)
@@ -268,7 +268,7 @@ def main():
     log("", log_file)
     log("[Step 3] 轮询训练状态（每 10 秒）...", log_file)
 
-    # 引擎日志路径由 train_manager 生成（<批次>/.logs/engine_<ts>.log），从 status 读取
+    # 引擎日志路径由 train_manager 生成（<批次>/.logs/train_<ts>.log），从 status 读取
     engine_log_path = train_manager.get_status().get("log_path") or ""
     last_engine_lines = 0  # 跟踪已打印行数，避免重复
 

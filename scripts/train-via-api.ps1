@@ -48,7 +48,8 @@ if ($TailOnly) {
         Write-Host "  批次目录不存在: $TargetBatch" -ForegroundColor Red
         exit 1
     }
-    $EngineLog = Get-ChildItem (Join-Path $TargetBatch '.logs') -Filter 'engine_*.log' -ErrorAction SilentlyContinue |
+    $EngineLog = Get-ChildItem (Join-Path $TargetBatch '.logs') -Filter 'train_*.log' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^train_\d{8}_\d{6}\.log$' } |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
     Show-Step "Tail 模式：跟踪批次 $TargetBatch 的最新引擎日志"
     if (-not (Test-Path $EngineLog)) {
@@ -142,8 +143,9 @@ $start = $resp.Body | ConvertFrom-Json
 $start | ConvertTo-Json -Depth 5
 if (-not $start.success) { throw "启动失败: $($start.error)" }
 
-# 引擎日志现在落在批次目录内的 .logs/engine_<ts>.log（PS1 transcript 仍在根 .logs）
-$EngineTailPath = Get-ChildItem (Join-Path $DATA_DIR '.logs') -Filter 'engine_*.log' -ErrorAction SilentlyContinue |
+# 引擎日志现在落在批次目录内的 .logs/train_<ts>.log（PS1 transcript 仍在根 .logs）
+$EngineTailPath = Get-ChildItem (Join-Path $DATA_DIR '.logs') -Filter 'train_*.log' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^train_\d{8}_\d{6}\.log$' } |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 
 # ====== Step 3: 轮询状态 + 实时 tail 引擎日志 ======

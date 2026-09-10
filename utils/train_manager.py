@@ -281,7 +281,7 @@ class TrainManager:
         log_dir = os.path.join(batch_dir, '.logs')
         os.makedirs(log_dir, exist_ok=True)
         ts = time.strftime("%Y%m%d_%H%M%S")
-        self.log_path = os.path.join(log_dir, f'engine_{ts}.log')
+        self.log_path = os.path.join(log_dir, f'train_{ts}.log')
         self.log_file = open(self.log_path, 'w', encoding='utf-8')
 
         # 构建训练命令 - 检查是否有 checkpoint 可断点续训
