@@ -201,6 +201,8 @@ def main():
         "num_chars": num_chars,
         "max_chars_per_font": max_chars_per_font,
         "num_workers": num_workers,
+        # 每轮都存 LoRA checkpoint，中断后最多丢 1 epoch
+        "save_last_freq": int(cfg.get("saveLastFreq", 1)),
     }
     start_result = train_manager.start_training(start_params)
     if not start_result.get("success"):

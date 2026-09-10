@@ -287,6 +287,10 @@ class TrainManager:
             "--data_path", params['data_path'],
             "--test_npz_path", params['test_npz_path'],
             "--output_dir", output_dir,
+            # 每轮都存（默认 5 → 改成 1），中断后 loss ≤ 1 epoch
+            "--save_last_freq", str(params.get('save_last_freq', 1)),
+            # 关闭 best checkpoint（避免再存一份更大的；用户只用 last 即可）
+            "--save_best_freq", "0",
         ]
         # 断点续训：output_dir 有 checkpoint 则 resume，否则从头开始
         if os.path.exists(checkpoint_path):
