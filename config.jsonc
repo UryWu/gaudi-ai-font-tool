@@ -46,7 +46,7 @@
   // ↑ 继续训练 / 测试生成用的 checkpoint 路径（UI 用，训练脚本不读它）
   //   训练完成后前端会自动填入 <outputDir>/checkpoint-last.pth
 
-  "resumeFrom": "",
+  "resumeFrom": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\model\\run\\train_images_20260911_021429\\checkpoint-last.pth",
   // ↑ ★训练脚本专用的续训入口（scripts/train_lora.py）
   //   非空 = 续训模式：跳过 prepare，复用该 checkpoint 所在批次继续训
   //   留空 = 新建训练：prepare 新批次，从 baseCheckpoint 从头训
@@ -122,6 +122,6 @@
 
   // ===== 四、继续训练 =====
 
-  "continueEpochs": 1
+  "continueEpochs": 24
   // ↑ 点「继续训练」时追加的轮次数（在已有 checkpoint-last.pth 基础上续训）
 }
