@@ -16,9 +16,11 @@
   //   从 GitHub Release v1.0 分片下载后合并得到
   //   下载参考：installer/scripts/download_model.py
 
-  "sourceFont": "G:\\Projects\\projects_ai\\gaudi-ai-font-tool\\font\\default.ttf",
-  // ↑ 源字体 = source 通道标准字形 (default.ttf, 已随仓库分发)
-  //   训练复合图左 1/4 用它渲染，告诉模型「要生成哪个字」
+  "sourceFont": "C:\\Windows\\Fonts\\simfang.ttf",
+  // ↑ 源字体 = source 通道标准字形（训练复合图左 1/4 用它渲染，告诉模型「要生成哪个字」）
+  //   ★必须字形完整，且与生字侧 gen_chars.py 的 SOURCE_FONT 保持一致
+  //   推荐 仿宋 simfang.ttf（2.85万字）；不要用 font/default.ttf（赵孟頫楷书，
+  //   字形不全→约 27% 的 source 通道为空白，且部分字渲染成繁体形态，影响训练）
 
   "refFont": "",
   // ↑ 学习字库 TTF（可选）
