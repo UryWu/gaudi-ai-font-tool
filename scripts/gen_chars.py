@@ -39,12 +39,21 @@ from pathlib import Path
 # —— 模型位置（个人字迹训练产出的 checkpoint）——
 CHECKPOINT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images_20260910_031118\checkpoint-last.pth"
 
-# —— 基本字库 / 源字体（基本字库 = ref 网格字体；源字体 = source 通道字体）——
-REF_FONT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\default.ttf"
-SOURCE_FONT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\default.ttf"
+# —— REF_FONT（基本字库） vs SOURCE_FONT（源字体） ——
+# REF_FONT    = 引擎画 ref 网格（8 个"风格参考字"）时用的字体
+#              = 引擎学习"你的字长啥样"的目标
+#              = 应当填**你的个人字库 TTF**（从 gaudi-font-preprocess 导出的字形图合成的 TTF）
+#              = 临时没合成 TTF 时可暂用 default.ttf（但 default.ttf 字形不全，会跳过大量字）
+# SOURCE_FONT = 引擎画 source 通道（"要生成哪个 unicode 码点"的标准字形）时用的字体
+#              = 引擎认字用，必须是字形数据齐全的字体
+#              = 推荐 simsunb.ttf（宋体扩展 B，3.4 万字）或 msyh.ttc（微软雅黑，3 万+字）
+#              = 不要用 default.ttf（只有约 1000 个稀疏 CJK 实际字形，常用字渲染成空白被跳过）
+REF_FONT    = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\default.ttf"  # TODO: 换成你的个人字库 TTF
+SOURCE_FONT = r"C:\Windows\Fonts\simsunb.ttf"                                # 宋体扩展 B，覆盖 3.4 万字
 
 # —— 输入文本（三选一：优先 INPUT_TEXT_STDIN > INPUT_TEXT_FILE > INPUT_TEXT）——
-INPUT_TEXT = "你好，世界！这是一个测试段落。     段首缩进用空格保留。"
+# INPUT_TEXT = "你好，世界！这是一个测试段落。     段首缩进用空格保留。"
+INPUT_TEXT = "你"
 INPUT_TEXT_FILE = ""          # 留空 = 不读文件
 INPUT_TEXT_STDIN = False      # True 时从 stdin 读
 
