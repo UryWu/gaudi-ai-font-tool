@@ -273,7 +273,7 @@ def main():
         if status["status"] in ("completed", "error", "idle") and cur_epoch >= epochs:
             break
         if status["status"] == "error":
-            log(f"  训练错误: {status['error_message']}", log_file)
+            log(f"  训练错误: {status.get('error', '未知错误')}", log_file)
             break
 
     # 完成总结

@@ -261,6 +261,12 @@ class TrainManager:
         if self.process and self.process.poll() is None:
             return {"success": False, "error": "训练正在进行中"}
 
+        # 旧卡（Pascal/GTX 1060）不支持 bfloat16, 引擎 torch.compile 会反复跳过重试
+        # 禁用 Inductor autotune 让模型用 eager 模式跑, 启动更快、内存更低
+        os.environ.setdefault("TORCHINDUCTOR_MAX_AUTOTUNE", "0")
+        os.environ.setdefault("TORCHINDUCTOR_DISABLE", "1")
+        os.environ.setdefault("TORCH_COMPILE_DEBUG", "0")
+
         self.status = "training"
         self.error_message = ""
         self.current_epoch = 0
@@ -289,8 +295,6 @@ class TrainManager:
             "--output_dir", output_dir,
             # 每轮都存（默认 5 → 改成 1），中断后 loss ≤ 1 epoch
             "--save_last_freq", str(params.get('save_last_freq', 1)),
-            # 关闭 best checkpoint（避免再存一份更大的；用户只用 last 即可）
-            "--save_best_freq", "0",
         ]
         # 断点续训：output_dir 有 checkpoint 则 resume，否则从头开始
         if os.path.exists(checkpoint_path):
