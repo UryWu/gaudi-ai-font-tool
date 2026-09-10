@@ -21,7 +21,8 @@
 **关键点：**
 - `checkpoint-last.pth` 是后续生成页要用的模型，**必须记住这个目录**
 - 训练完成后，前端会自动填入 `<output_dir>/checkpoint-last.pth`
-- 同一目录再次训练会自动 resume（断点续训）
+- 断点续训：**不是**「同目录自动续训」，而是通过 `config.jsonc` 的 `resumeFrom` 显式指定
+  checkpoint 触发（详见 [scripts-guide.md](scripts-guide.md) 第 6 节）；`continueEpochs` 控制追加轮数
 
 ## 生成页 `/generate` 的 output_dir
 
