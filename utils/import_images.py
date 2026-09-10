@@ -200,15 +200,28 @@ def assemble_composites(
 
     render_src, src_available = _load_source_renderer(source_font, resolution)
 
-    # 选 ref 字：优先在 items 字符集内找；找不到的用 source_font 渲染兑底
+    # ref 网格 = 风格参考，必须全部来自个人字迹
+    # （引擎每张图随机抽 1 格作风格锚点；若用系统字体，会污染风格条件）
     item_chars = {ch for _, ch, _ in items}
     ref_chars_eff = []
+    used = set()
+    # 1) 先用默认 8 字中确实存在于个人字迹的
     for c in ref_chars:
-        if c in item_chars:
-            # 实际拿一张 items 里的同字 PNG 做 ref
+        if c in item_chars and c not in used:
             ref_chars_eff.append(('item', c))
-        else:
-            ref_chars_eff.append(('render', c))
+            used.add(c)
+    # 2) 不足则从个人字迹里按顺序补齐
+    for _, ch, _ in items:
+        if len(ref_chars_eff) >= len(ref_chars):
+            break
+        if ch not in used:
+            ref_chars_eff.append(('item', ch))
+            used.add(ch)
+    # 3) 极端情况（个人字迹总数 < ref 格数）才用 source_font 兜底
+    idx = 0
+    while len(ref_chars_eff) < len(ref_chars):
+        ref_chars_eff.append(('render', ref_chars[idx % len(ref_chars)]))
+        idx += 1
 
     os.makedirs(output_data_dir, exist_ok=True)
     font_dir = os.path.join(output_data_dir, '001_font')
