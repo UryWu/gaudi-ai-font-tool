@@ -66,6 +66,22 @@ powershell -ExecutionPolicy Bypass -File scripts\train-lora.ps1
    - 批次内 `<batch>/.logs/training.log`（引擎）
    - 输出根 `<outputDir>/.logs/train_<时间戳>.log`（汇总：路径/参数/用时）
 
+5. **Checkpoint 自动保存 + 断点续训：**
+   - **每轮都存**：`config.jsonc` 的 `saveLastFreq` 字段（默认 1）控制每 N 轮存一次 `checkpoint-last.pth`。
+     - `saveLastFreq=1`（推荐）：每轮存，10 epoch = 10 个 ckpt（每个 ~12MB LoRA），中断最多丢 1 epoch
+     - `saveLastFreq=5`（引擎默认）：10 epoch 只存 2 个 ckpt（epoch=5 和 epoch=10），中间崩了从 5 续
+   - **`checkpoint-best.pth` 关闭**（`save_best_freq=0`），不存冗余备份
+   - **断点续训机制**（`utils/train_manager.start_training` 自动检测）：
+     1. 重跑 `train-lora.ps1` 选**同一 outputDir**（脚本会落到同一 `train_images_<ts>/` 批次）
+     2. 引擎发现 `<outputDir>/train_images_<ts>/checkpoint-last.pth` 存在 → 自动加 `--resume` 参数
+     3. 读 ckpt 的 `epoch` 字段 → `total_epochs` 自动调为 `max(你设的, start_epoch + 1)`
+     4. 引擎从 `epoch+1` 继续训
+   - **显式续训示例**（如想跑 50 epoch 实际只跑了 20）：
+     1. 跑一次 `train-lora.ps1`（`epochs=50`），训练到 epoch=20 时 Ctrl+C
+     2. 修改 `config.jsonc`：`epochs=80`（或直接保留 50 让引擎从 20 → 50）
+     3. 再跑 `train-lora.ps1` → 自动从 epoch=20 续训
+   - **任何中断**（Ctrl+C / 关窗口 / 杀进程）→ 已有 `checkpoint-last.pth`（最新一轮权重）→ 下次跑自动 `--resume`
+
 **关键经验（GTX 1060 6GB）：**
 - `batchSize ≤ 4`（batch=64 触发 CUDA OOM 段错误退出码 0xC0000005）
 - `numFonts ≥ 1000`（与预训练权重 shape 匹配，否则报 `size mismatch`）
