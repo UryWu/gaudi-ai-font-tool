@@ -48,8 +48,9 @@ if ($TailOnly) {
         Write-Host "  批次目录不存在: $TargetBatch" -ForegroundColor Red
         exit 1
     }
-    $EngineLog = Join-Path $TargetBatch '.logs\training.log'
-    Show-Step "Tail 模式：跟踪批次 $TargetBatch 的 training.log"
+    $EngineLog = Get-ChildItem (Join-Path $TargetBatch '.logs') -Filter 'engine_*.log' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+    Show-Step "Tail 模式：跟踪批次 $TargetBatch 的最新引擎日志"
     if (-not (Test-Path $EngineLog)) {
         Write-Host "  训练日志不存在: $EngineLog" -ForegroundColor Red
         exit 1
@@ -141,8 +142,9 @@ $start = $resp.Body | ConvertFrom-Json
 $start | ConvertTo-Json -Depth 5
 if (-not $start.success) { throw "启动失败: $($start.error)" }
 
-# 引擎日志现在落在批次目录内的 .logs/training.log（PS1 transcript 仍在根 .logs）
-$EngineTailPath = Join-Path $DATA_DIR '.logs\training.log'
+# 引擎日志现在落在批次目录内的 .logs/engine_<ts>.log（PS1 transcript 仍在根 .logs）
+$EngineTailPath = Get-ChildItem (Join-Path $DATA_DIR '.logs') -Filter 'engine_*.log' -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 
 # ====== Step 3: 轮询状态 + 实时 tail 引擎日志 ======
 Show-Step 'Step 3/3: 轮询训练状态（每 5 秒 + 实时 tail 训练日志）'
@@ -180,6 +182,6 @@ Write-Host ''
 Write-Host '训练完成。产物在:' -ForegroundColor Green
 Write-Host "  $DATA_DIR\checkpoint-last.pth"
 Write-Host "  $DATA_DIR\checkpoint-best.pth"
-Write-Host "  引擎日志: $DATA_DIR\.logs\training.log"
+Write-Host "  引擎日志: $EngineTailPath"
 Write-Host "  PS1 日志: $Ps1LogPath"
 Stop-Transcript | Out-Null

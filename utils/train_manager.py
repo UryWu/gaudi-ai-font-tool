@@ -276,11 +276,12 @@ class TrainManager:
         self.total_epochs = params.get('epochs', 400)
 
         # 日志放在批次目录内 .logs/（点前缀目录，引擎 main_jit 扫描只跳过 '.' 开头 → 不会被当字体目录）
-        # 这样每个训练批次自带日志，与脚本/UI 两入口一致、互不覆盖
+        # 文件名带时间戳，多次训练/续训互不覆盖
         batch_dir = params['output_dir']
         log_dir = os.path.join(batch_dir, '.logs')
         os.makedirs(log_dir, exist_ok=True)
-        self.log_path = os.path.join(log_dir, 'training.log')
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        self.log_path = os.path.join(log_dir, f'engine_{ts}.log')
         self.log_file = open(self.log_path, 'w', encoding='utf-8')
 
         # 构建训练命令 - 检查是否有 checkpoint 可断点续训

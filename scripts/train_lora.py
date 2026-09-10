@@ -12,8 +12,9 @@
   2. python scripts/train_lora.py
 
 输出：
-  - 训练产物：<outputDir>/train_images_<时间戳>/（含 001_font/*.png + test.npz + checkpoint-last.pth）
-  - 详细日志：<outputDir>/<batch_dir>/.logs/training.log（同时实时回显到控制台）
+  - 训练产物：<outputDir>/train_images_<时间戳>/
+  - 批次内日志：<批次>/.logs/engine_<时间戳>.log（引擎原始）
+               <批次>/.logs/summary_<时间戳>.log（本脚本汇总）
 
 依赖：
   - config.jsonc（项目根）
@@ -51,14 +52,27 @@ def load_config() -> dict:
         sys.exit(f"config.jsonc 解析失败: {e}")
 
 
+_log_buffer = []  # 日志文件尚未创建时先缓存，创建后一次性补写
+
+
 def log(msg, log_file=None):
-    """同时输出到控制台和日志文件"""
+    """同时输出到控制台和日志文件（文件未就绪时先进缓冲区）"""
     ts = time.strftime("%H:%M:%S")
     line = f"[{ts}] {msg}"
     print(line, flush=True)
     if log_file:
         log_file.write(line + "\n")
         log_file.flush()
+    else:
+        _log_buffer.append(line)
+
+
+def _flush_buffer(log_file):
+    """把缓冲的早期日志补写进日志文件"""
+    for line in _log_buffer:
+        log_file.write(line + "\n")
+    log_file.flush()
+    _log_buffer.clear()
 
 
 def build_char_count(cfg: dict):
@@ -119,37 +133,20 @@ def main():
     # 输出目录
     output_dir = paths["outputDir"]
 
-    # 输出批次（prepare_data_from_images 自己会建 train_images_<ts> 子目录）
-    # 我们提前算 prepare 之后的路径便于日志定位
-    ts_now = time.strftime("%Y%m%d_%H%M%S")
-    expected_batch_dir = os.path.join(output_dir, f"train_images_{ts_now}")
-
-    # 准备批次日志（先建批次目录不可能，只能在 prepare 后知道）
-    # 这里把总日志写到 <outputDir>/.logs/train_<ts>.log（更稳妥）
-    output_root = Path(output_dir)
-    output_root.mkdir(parents=True, exist_ok=True)
-    logs_root = output_root / ".logs"
-    logs_root.mkdir(parents=True, exist_ok=True)
-    summary_log_path = logs_root / f"train_{ts_now}.log"
-    log_file = open(summary_log_path, "w", encoding="utf-8")
-
-    log("=" * 70, log_file)
-    log("个人字库 LoRA 训练任务", log_file)
-    log("=" * 70, log_file)
-    log(f"配置文件:    {CONFIG_PATH}", log_file)
-    log(f"baseCheckpoint: {paths['baseCheckpoint']}", log_file)
-    log(f"sourceFont:     {paths['sourceFont']}", log_file)
-    log(f"refFont:        {ref_font or '(空, images_dir 模式)'}", log_file)
-    log(f"imagesDir:      {images_dir or '(空)'}", log_file)
-    log(f"outputDir:      {output_dir}", log_file)
-    log(f"预期批次:      {expected_batch_dir}/", log_file)
-    log(f"批次日志:      <批次>/.logs/training.log", log_file)
-    log(f"本脚本汇总:    {summary_log_path}", log_file)
-    log(f"", log_file)
-    log(f"epochs={epochs}, batch_size={batch_size}, lora_r={lora_r}, lora_alpha={lora_alpha}", log_file)
-    log(f"cfg={cfg_scale}, num_fonts={num_fonts}, num_chars={num_chars}", log_file)
-    log(f"max_chars_per_font={max_chars_per_font}, num_workers={num_workers}", log_file)
-    log(f"char_count={char_count}  (None=全部, 数字=取前 N 字)", log_file)
+    log("=" * 70)
+    log("个人字库 LoRA 训练任务")
+    log("=" * 70)
+    log(f"配置文件:    {CONFIG_PATH}")
+    log(f"baseCheckpoint: {paths['baseCheckpoint']}")
+    log(f"sourceFont:     {paths['sourceFont']}")
+    log(f"refFont:        {ref_font or '(空, images_dir 模式)'}")
+    log(f"imagesDir:      {images_dir or '(空)'}")
+    log(f"outputDir:      {output_dir}")
+    log("")
+    log(f"epochs={epochs}, batch_size={batch_size}, lora_r={lora_r}, lora_alpha={lora_alpha}")
+    log(f"cfg={cfg_scale}, num_fonts={num_fonts}, num_chars={num_chars}")
+    log(f"max_chars_per_font={max_chars_per_font}, num_workers={num_workers}")
+    log(f"char_count={char_count}  (None=全部, 数字=取前 N 字)")
 
     # 引导：images_dir 模式要求 images_dir
     if not images_dir:
@@ -162,8 +159,8 @@ def main():
     from utils.train_manager import train_manager
 
     # Step 1: prepare_data_from_images
-    log("", log_file)
-    log("[Step 1] 准备训练数据（images_dir 模式）...", log_file)
+    log("")
+    log("[Step 1] 准备训练数据（images_dir 模式）...")
     prep_result = train_manager.prepare_data_from_images(
         output_dir=output_dir,
         images_dir=images_dir,
@@ -171,13 +168,25 @@ def main():
         char_count=char_count,
     )
     if not prep_result.get("success"):
-        log(f"准备失败: {prep_result.get('error')}", log_file)
-        sys.exit(1)
+        sys.exit(f"准备失败: {prep_result.get('error')}")
 
     data_dir = prep_result["data_dir"]
     test_npz = prep_result.get("test_npz")
     char_count_real = prep_result.get("char_count", 0)
     skipped = prep_result.get("skipped", 0)
+
+    # 批次日志目录（所有训练日志统一进这里，带时间戳）
+    ts_now = time.strftime("%Y%m%d_%H%M%S")
+    batch_logs_dir = Path(data_dir) / ".logs"
+    batch_logs_dir.mkdir(parents=True, exist_ok=True)
+    summary_log_path = batch_logs_dir / f"summary_{ts_now}.log"
+    log_file = open(summary_log_path, "w", encoding="utf-8")
+    _flush_buffer(log_file)  # 补写前面缓存的头部信息
+    log(f"批次目录: {data_dir}", log_file)
+    log(f"训练批次: train_images_{os.path.basename(data_dir).replace('train_images_', '')}", log_file)
+    log(f"引擎日志: {batch_logs_dir}/engine_{ts_now}.log", log_file)
+    log(f"汇总日志: {summary_log_path}", log_file)
+    log("", log_file)
     log(f"  数据目录:    {data_dir}", log_file)
     log(f"  实际字数:    {char_count_real} (请求 {char_count})", log_file)
     log(f"  test.npz:    {test_npz}", log_file)
@@ -215,8 +224,8 @@ def main():
     log("", log_file)
     log("[Step 3] 轮询训练状态（每 10 秒）...", log_file)
 
-    # 定位批次引擎日志路径（start_training 已建 .logs/training.log）
-    engine_log_path = os.path.join(data_dir, ".logs", "training.log")
+    # 引擎日志路径由 train_manager 生成（<批次>/.logs/engine_<ts>.log），从 status 读取
+    engine_log_path = train_manager.get_status().get("log_path") or ""
     last_engine_lines = 0  # 跟踪已打印行数，避免重复
 
     train_t0 = time.time()  # 训练计时
@@ -283,10 +292,10 @@ def main():
     log("=" * 70, log_file)
     log("完成！", log_file)
     log(f"  最终状态:     {status['status']}", log_file)
-    log(f"  数据目录:     {data_dir}", log_file)
+    log(f"  批次目录:     {data_dir}", log_file)
     log(f"  checkpoint:   {data_dir}/checkpoint-last.pth", log_file)
-    log(f"  批次训练日志: {data_dir}/.logs/training.log", log_file)
-    log(f"  本次汇总日志: {summary_log_path}", log_file)
+    log(f"  引擎日志:     {engine_log_path}", log_file)
+    log(f"  汇总日志:     {summary_log_path}", log_file)
     log(f"  最终 epoch:   {status['epoch']}/{status['total_epochs']}", log_file)
     log(f"  最终 loss:    {status['loss']}", log_file)
     log(f"  总用时:       {overall_elapsed:.1f}s ({overall_elapsed/60:.1f}min)", log_file)

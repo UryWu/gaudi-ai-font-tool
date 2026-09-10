@@ -52,16 +52,18 @@ REF_FONT    = r"G:\Projects\projects_ai\gaudi-ai-font-tool\font\my_personal_font
 SOURCE_FONT = r"C:\Windows\Fonts\simfang.ttf"                                          # 源字体（仿宋，2.85万字，字形真实齐全）
 
 # —— 输入文本（三选一：优先 INPUT_TEXT_STDIN > INPUT_TEXT_FILE > INPUT_TEXT）——
-# INPUT_TEXT = "你好，世界！这是一个测试段落。     段首缩进用空格保留。"
-INPUT_TEXT = "你"
+# 批量生字：数字 + 简繁混 + 标点 验证生成质量
+INPUT_TEXT = "0123456789你好中国永和不世业中为主义习书了事"
 INPUT_TEXT_FILE = ""          # 留空 = 不读文件
 INPUT_TEXT_STDIN = False      # True 时从 stdin 读
 
-# —— 输出位置（落在 model/run/ 下，与训练产出 train_images_<ts>/ 并列；脚本会再新建 gen_<ts>/ 子目录）——
-OUTPUT_DIR = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run"
+# —— 输出位置：自动派生自 CHECKPOINT（哪个模型生成，产物就落在哪个批次目录下）——
+#   <CHECKPOINT所在批次>/gen_<ts>/gen_char/*.png        ← 字形图
+#   <CHECKPOINT所在批次>/gen_<ts>/.logs/gen_summary_<ts>.log  ← 生成日志
+# 无需配置 OUTPUT_DIR
 
 # —— 生成参数 ——
-MULTIPLIER = 5          # 每字生成张数（多采样便于人工筛选）
+MULTIPLIER = 1          # 每字生成张数（模型是分布采样，批量时 1 张够看，再加可人工筛选）
 CFG = 4.0               # classifier-free guidance
 BATCH_SIZE = 4           # GTX 1060 6GB 推荐 ≤4
 RESOLUTION = 256         # 复合图左 1/4 source 通道尺寸
@@ -217,14 +219,16 @@ def main():
     if not os.path.isfile(SOURCE_FONT):
         sys.exit(f"source_font 不存在: {SOURCE_FONT}")
 
-    output_root = Path(OUTPUT_DIR)
-    output_root.mkdir(parents=True, exist_ok=True)
-    logs_dir = output_root / ".logs"
-    logs_dir.mkdir(parents=True, exist_ok=True)
+    # 输出目录 = checkpoint 所在批次目录（哪个模型生成，产物就落在它的目录下）
+    # 结构：<批次>/gen_<ts>/gen_char/*.png + <批次>/gen_<ts>/.logs/gen_summary_<ts>.log
+    batch_dir = Path(CHECKPOINT).parent
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    actual_output = output_root / f"gen_{timestamp}"
-    actual_output.mkdir(parents=True, exist_ok=True)
-    log_path = logs_dir / f"gen_{timestamp}.log"
+    gen_dir = batch_dir / f"gen_{timestamp}"
+    char_dir = gen_dir / "gen_char"
+    logs_dir = gen_dir / ".logs"
+    for d in (char_dir, logs_dir):
+        d.mkdir(parents=True, exist_ok=True)
+    log_path = logs_dir / f"gen_summary_{timestamp}.log"
     log_file = open(log_path, "w", encoding="utf-8")
 
     overall_t0 = time.time()
@@ -234,8 +238,8 @@ def main():
     log(f"模型位置:    {CHECKPOINT}", log_file)
     log(f"基本字库:    {REF_FONT}", log_file)
     log(f"源字体:      {SOURCE_FONT}", log_file)
-    log(f"输出位置:    {output_root}", log_file)
-    log(f"输出子目录:  {actual_output}", log_file)
+    log(f"生成目录:    {gen_dir}", log_file)
+    log(f"字形输出:    {char_dir}", log_file)
     log(f"日志文件:    {log_path}", log_file)
     log(f"引擎:        {ENGINE_DIR}", log_file)
     log(f"Python:      {PYTHON_EXE}", log_file)
@@ -276,7 +280,7 @@ def main():
             if code in success_codes:
                 continue
             fname = f"u{code:05X}_{chr(code)}.png" if code > 0xFFFF else f"uni{code:04X}_{chr(code)}.png"
-            shutil.copy(png, actual_output / fname)
+            shutil.copy(png, char_dir / fname)
             success_codes.add(code)
             round_success += 1
 
@@ -288,7 +292,8 @@ def main():
     overall_elapsed = time.time() - overall_t0
     log("=" * 70, log_file)
     log("完成！", log_file)
-    log(f"  生成目录: {actual_output}", log_file)
+    log(f"  生成目录: {gen_dir}", log_file)
+    log(f"  字形目录: {char_dir}", log_file)
     log(f"  成功:     {len(success_codes)}/{len(chars)} 字", log_file)
     log(f"  引擎用时: {total_engine_time:.1f}s", log_file)
     log(f"  总用时:   {overall_elapsed:.1f}s", log_file)

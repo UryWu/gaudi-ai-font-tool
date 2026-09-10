@@ -92,6 +92,6 @@
 
   // ===== 四、继续训练 =====
 
-  "continueEpochs": 50
+  "continueEpochs": 5
   // ↑ 点「继续训练」时追加的轮次数（在已有 checkpoint-last.pth 基础上续训）
 }

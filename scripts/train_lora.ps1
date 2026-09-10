@@ -2,7 +2,7 @@
 # 个人字库 LoRA 训练 - PowerShell 启动器
 # 内部直接调 python scripts/train_lora.py（不启 Flask）
 # 用法：在项目根 PowerShell 里运行
-#   powershell -ExecutionPolicy Bypass -File scripts\train-lora.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\train_lora.ps1
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -27,8 +27,9 @@ Write-Host "  batchSize       批大小（1060 6GB 必 ≤4）"
 Write-Host "  numFonts        字体数（必 ≥1000）"
 Write-Host "  charCountMode   'all'=全部 | 'custom'=用 charCountCustom"
 Write-Host ""
-Write-Host "日志：<outputDir>\.logs\"
-Write-Host "训练日志：<批次目录>\.logs\training.log"
+Write-Host "日志（统一在训练批次目录内）："
+Write-Host "  引擎日志: <批次>\.logs\engine_<时间戳>.log"
+Write-Host "  汇总日志: <批次>\.logs\summary_<时间戳>.log"
 Write-Host ""
 
 # 直接调 Python 脚本（不依赖 Flask）

@@ -125,7 +125,7 @@ G:\...\model\run\logs\ps1_<时间戳>.log
 **冒烟测试（5 个字 + 1 epoch）：**
 ```powershell
 # 在脚本顶部把 $CHAR_COUNT = 5，$EPOCHS = 1
-# 跑完后看 model\run\logs\training.log
+# 跑完后看 <批次>\.logs\engine_<时间戳>.log
 ```
 
 **完整训练（319 字 + 50 epoch）：**
@@ -164,7 +164,7 @@ model/run/train_images_<ts>/
 └── checkpoint-best.pth        # 验证集最优
 ```
 
-日志在兄弟目录 `model/run/logs/training.log`（被设计成不在 data_dir 里，避免被当训练数据）。
+日志在批次目录内 `<批次>/.logs/engine_<时间戳>.log`（点前缀目录，引擎扫描跳过，不会被当训练数据）。
 
 ## 端到端冒烟 checklist
 

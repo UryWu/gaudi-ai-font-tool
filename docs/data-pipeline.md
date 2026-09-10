@@ -22,7 +22,7 @@
        ├── uni4E00_01.png                                       │   (1024×256 复合图)
        ├── ...                                                 ├── test.npz
        ├── fontlab_<ts>.csv                                    ├── checkpoint-last.pth
-       └── fontlab_<ts>.source_map.json                        └── logs/training.log
+       └── fontlab_<ts>.source_map.json                        └── .logs/engine_<ts>.log
                        │                                                
                        │ ③ 路径复制到训练页「字形素材目录」                      
                        └─────────────────────────────────────→                    

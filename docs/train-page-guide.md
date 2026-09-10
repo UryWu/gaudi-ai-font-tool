@@ -101,7 +101,7 @@ UI 上有「800 字 / 3000 字 / 全部 / 手动输入」单选按钮：
 | 日志类型 | 路径 | 怎么开 |
 |---------|------|--------|
 | Web UI 日志终端 | 训练页右侧黑底 | 不用动，自动滚 |
-| 引擎训练日志 | `model\run\logs\training.log` | `Get-Content -Wait` 或在文件管理器双击 |
+| 引擎训练日志 | `<批次>\.logs\engine_<时间戳>.log` | `Get-Content -Wait` 或在文件管理器双击 |
 | PS1 脚本日志 | `model\run\logs\ps1_<ts>.log` | 同上 |
 
 ## 训练完成产物
@@ -130,7 +130,7 @@ G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images_<时间戳>\
 | `ZeroDivisionError: float division by zero` | 数据集太小或 batch_size 太大，调小 batch |
 | `CUDA out of memory` | batch_size 调小（如 4 → 2）|
 | `ModuleNotFoundError: No module named 'xxx'` | `uv pip install --python .venv/Scripts/python.exe xxx` |
-| 训练秒退 | 看 `model\run\logs\training.log` 完整堆栈 |
+| 训练秒退 | 看 `<批次>\.logs\engine_<时间戳>.log` 完整堆栈 |
 | `char_count: 0` | images_dir 路径错，检查后端能访问 |
 
 ## 端到端冒烟 checklist
