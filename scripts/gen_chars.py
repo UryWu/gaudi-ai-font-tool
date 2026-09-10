@@ -48,8 +48,8 @@ INPUT_TEXT = "你好，世界！这是一个测试段落。     段首缩进用�
 INPUT_TEXT_FILE = ""          # 留空 = 不读文件
 INPUT_TEXT_STDIN = False      # True 时从 stdin 读
 
-# —— 输出位置 ——
-OUTPUT_DIR = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\gen_out"
+# —— 输出位置（落在 model/run/ 下，与训练产出 train_images_<ts>/ 并列；脚本会再新建 gen_<ts>/ 子目录）——
+OUTPUT_DIR = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run"
 
 # —— 生成参数 ——
 MULTIPLIER = 5          # 每字生成张数（多采样便于人工筛选）
