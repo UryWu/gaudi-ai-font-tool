@@ -61,7 +61,8 @@ powershell -ExecutionPolicy Bypass -File scripts\train_lora.ps1
    <outputDir>/train_images_<时间戳>/
    ├── 001_font/*.png              # 1024×256 复合训练图
    ├── test.npz                     # 门禁文件
-   ├── checkpoint-last.pth          # 训练完模型（生字页用这个）
+   ├── checkpoint-last.pth          # 最新一轮模型（续训用这个）
+   ├── checkpoint-best.pth          # loss 最小的模型（效果最好，推荐用它生字）
    ├── .logs/                       # ★所有训练日志统一在这里（带时间戳）
    │   ├── train_<时间戳>.log      # 引擎原始输出
    │   └── summary_<时间戳>.log  # 训练脚本汇总（路径/参数/进度/用时）
@@ -73,11 +74,14 @@ powershell -ExecutionPolicy Bypass -File scripts\train_lora.ps1
    ```
 4. 日志规则：**所有日志都在批次目录 `.logs/` 内，文件名带时间戳**，多次训练/续训互不覆盖，不再有 `<outputDir>/.logs/` 这样的根级散落日志。
 
-5. **Checkpoint 自动保存**（`saveLastFreq`）：
-   - 控制每 N 轮存一次 `checkpoint-last.pth`（**固定文件名，每轮覆盖**，不产生多份）
-   - `saveLastFreq=1`（推荐，默认）：每轮覆盖 → 中断最多丢 1 轮
-   - `saveLastFreq=5`（引擎默认）：每 5 轮存一次 → 中断最多丢 4 轮
-   - 只产出 `checkpoint-last.pth`（引擎不存 best）
+5. **Checkpoint 自动保存**：
+   - **`checkpoint-last.pth`**（最新一轮）：由 `saveLastFreq` 控制，每 N 轮覆盖一次（**固定文件名**）
+     - `saveLastFreq=1`（推荐，默认）：每轮覆盖 → 中断最多丢 1 轮
+     - `saveLastFreq=5`（引擎默认）：每 5 轮存一次 → 中断最多丢 4 轮
+   - **`checkpoint-best.pth`**（loss 最小）：每轮与该批次历史最小 loss 比较，更小才更新
+     - 历史最小 loss 持久化在 `<批次>/.logs/best_loss.txt`（**跨续训保持**）
+     - 首次启用时会从历史 `train_*.log` 恢复最小 loss，**续训首轮即使变差也不会被误当 best**
+     - 需引擎补丁，见 [engine-patch.md](engine-patch.md) 补丁 2
 
 6. **断点续训**（`resumeFrom` 字段驱动）：
 
@@ -231,7 +235,8 @@ model/run/                                       # 训练根目录（config.json
 ├── train_images_<ts1>/                           # 训练批次 A（一次训练 = 一个批次）
 │   ├── 001_font/*.png                            # 复合训练图
 │   ├── test.npz
-│   ├── checkpoint-last.pth                       # 本次训练的模型
+│   ├── checkpoint-last.pth                       # 最新一轮模型（续训用）
+│   ├── checkpoint-best.pth                       # loss 最小模型（生字推荐用）
 │   ├── .logs/                                    # ★该批次所有日志
 │   │   ├── train_<时间戳>.log                   #   引擎原始日志
 │   │   └── summary_<时间戳>.log            #   训练脚本汇总

@@ -334,7 +334,10 @@ class TrainManager:
 
         self.process = subprocess.Popen(
             cmd, stdout=self.log_file, stderr=subprocess.STDOUT,
-            cwd=ZI2ZI_DIR
+            cwd=ZI2ZI_DIR,
+            # 引擎 stdout 重定向到文件时默认块缓冲 → 日志迟迟不落盘, 进度/实时日志看不到
+            # 强制 unbuffered 让每行立即写入
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
         )
 
         # 保存训练参数供继续训练和测试生成使用
@@ -371,7 +374,7 @@ class TrainManager:
             self.log_file = None
 
             last_pos = 0
-            while self.process.poll() is None:
+            while True:
                 with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
                     f.seek(last_pos)
                     for line in f:
@@ -389,6 +392,9 @@ class TrainManager:
                         if lr_match:
                             self.current_lr = float(lr_match.group(1))
                     last_pos = f.tell()
+                # 先读一次再判断进程是否退出 → 确保进程结束前写入的最后内容也被解析
+                if self.process.poll() is not None:
+                    break
                 time.sleep(2)
 
             self.process.wait()
