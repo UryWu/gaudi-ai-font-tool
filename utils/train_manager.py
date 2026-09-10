@@ -31,6 +31,7 @@ class TrainManager:
         self.error_message = ""
         self.start_time = None
         self.current_epoch = 0
+        self.completed_epoch = 0
         self.total_epochs = 0
         self.current_loss = 0
         self.current_lr = 0
@@ -270,6 +271,7 @@ class TrainManager:
         self.status = "training"
         self.error_message = ""
         self.current_epoch = 0
+        self.completed_epoch = 0
         self.current_loss = 0
         self.current_lr = 0
         self.start_time = time.time()
@@ -382,7 +384,13 @@ class TrainManager:
                         # 格式: Epoch: [30]  [11/12]  或  Epoch: [30] Total time
                         epoch_match = re.search(r'Epoch:\s+\[(\d+)\]', line)
                         if epoch_match:
+                            # current_epoch = 正在训练第几轮（1-based）
                             self.current_epoch = int(epoch_match.group(1)) + 1
+
+                        # 每轮结束会打印 "Epoch: [N] Total time: ..." → 该轮完成
+                        done_match = re.search(r'Epoch:\s+\[(\d+)\]\s+Total time', line)
+                        if done_match:
+                            self.completed_epoch = int(done_match.group(1)) + 1
 
                         loss_match = re.search(r'loss[:\s]+([\d.]+)', line, re.IGNORECASE)
                         if loss_match:
@@ -636,7 +644,9 @@ class TrainManager:
         elapsed = time.time() - self.start_time if self.start_time else 0
         return {
             "status": self.status,
-            "epoch": self.current_epoch,
+            # epoch = 已完成轮数（进度/ETA 用它）；running_epoch = 正在训练第几轮
+            "epoch": self.completed_epoch,
+            "running_epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
             "loss": round(self.current_loss, 4),
             "lr": self.current_lr,

@@ -323,10 +323,11 @@ def main():
             except Exception as e:
                 pass
 
-        if status["status"] in ("completed", "error", "idle") and cur_epoch >= target_epochs:
-            break
+        # 引擎子进程结束即训练结束（completed/error/idle），不再依赖轮次比较
         if status["status"] == "error":
             log(f"  训练错误: {status.get('error', '未知错误')}", log_file)
+            break
+        if status["status"] in ("completed", "idle"):
             break
 
     # 完成总结
