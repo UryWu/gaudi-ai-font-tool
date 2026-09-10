@@ -289,7 +289,9 @@ class TrainManager:
         # 构建训练命令 - 检查是否有 checkpoint 可断点续训
         script = os.path.join(ZI2ZI_DIR, "lora_finetune_jit.py")
         output_dir = params['output_dir']
-        checkpoint_path = os.path.join(output_dir, 'checkpoint-last.pth')
+        # 续训起点：显式传入 resume_checkpoint 优先（可指定 checkpoint-best.pth 等）
+        # 否则回退 output_dir/checkpoint-last.pth（UI「继续训练」的既有行为）
+        checkpoint_path = params.get('resume_checkpoint') or os.path.join(output_dir, 'checkpoint-last.pth')
 
         cmd = [
             ZI2ZI_PYTHON, script,
@@ -332,7 +334,19 @@ class TrainManager:
             "--sampling_method", params.get('sampling_method', 'heun'),
             "--num_sampling_steps", str(params.get('num_sampling_steps', 50)),
             "--num_workers", str(params.get('num_workers', 0)),
+            # 恒定 lr + 已收敛 → loss 在极限环里震荡；cosine 让后期 lr 衰减到 min_lr
+            "--lr_schedule", str(params.get('lr_schedule', 'constant')),
+            "--min_lr", str(params.get('min_lr', 0.)),
         ])
+
+        # 学习率：不传 → 引擎默认 blr × batch/256 线性缩放（blr=5e-5, 锚点 batch=256）
+        # 传绝对值 → 完全绕开缩放（小 batch 下缩放会把 lr 压到 1/64, 可能收敛不足）
+        try:
+            lr_val = float(params.get('lr') or 0)
+        except (TypeError, ValueError):
+            lr_val = 0
+        if lr_val > 0:
+            cmd.extend(["--lr", str(lr_val)])
 
         self.process = subprocess.Popen(
             cmd, stdout=self.log_file, stderr=subprocess.STDOUT,
@@ -352,6 +366,7 @@ class TrainManager:
             "base_checkpoint": params.get('base_checkpoint', ''),
             "epochs": self.total_epochs,
             "batch_size": params.get('batch_size', 64),
+            "lr": lr_val,
             "lora_r": params.get('lora_r', 32),
             "lora_alpha": params.get('lora_alpha', 32),
             "cfg": params.get('cfg', 2.6),

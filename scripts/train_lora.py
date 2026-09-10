@@ -127,6 +127,28 @@ def main():
     num_workers = int(cfg.get("numWorkers", 0))
     char_count = build_char_count(cfg)
 
+    # 学习率：留空 = 不传 --lr，引擎按 blr × batchSize / 256 线性缩放（blr=5e-5, 锚点 256）
+    #         填数字 = 绝对学习率，绕开缩放（改 batchSize 时它不变，需自行同步）
+    lr_raw = str(cfg.get("lr", "")).strip()
+    if lr_raw:
+        try:
+            lr_val = float(lr_raw)
+        except ValueError:
+            sys.exit(f"配置错误: lr 不是数字: {lr_raw!r}（留空=引擎默认，或填如 6.25e-6）")
+        if lr_val <= 0:
+            sys.exit(f"配置错误: lr 必须 > 0: {lr_val}")
+    else:
+        lr_val = None
+    # 留空时的等效值（仅用于打印，方便对比手动值是否合理）
+    lr_auto = 5e-5 * batch_size / 256
+
+    # lr 调度：constant（引擎默认）= 全程恒定；cosine = 前 warmupEpochs 轮线性爬升，
+    # 之后半周期余弦衰减到 minLr。用于收敛后打破 loss 极限环。
+    lr_schedule = str(cfg.get("lrSchedule", "constant")).strip().lower() or "constant"
+    if lr_schedule not in ("constant", "cosine"):
+        sys.exit(f"配置错误: lrSchedule 只支持 'constant' / 'cosine'，收到 {lr_schedule!r}")
+    min_lr = float(cfg.get("minLr", 0))
+
     images_dir = paths["imagesDir"].strip()
     ref_font = paths["refFont"].strip()
 
@@ -149,6 +171,8 @@ def main():
     log(f"outputDir:      {output_dir}")
     log("")
     log(f"epochs={epochs}, batch_size={batch_size}, lora_r={lora_r}, lora_alpha={lora_alpha}")
+    log(f"lr={f'{lr_val:.2e} (绝对, 绕开缩放)' if lr_val else f'(空) 引擎默认 blr×{batch_size}/256 = {lr_auto:.2e}'}")
+    log(f"lrSchedule={lr_schedule}" + (f", minLr={min_lr:.2e} (warmup 后余弦衰减到此值)" if lr_schedule == "cosine" else ""))
     log(f"cfg={cfg_scale}, num_fonts={num_fonts}, num_chars={num_chars}")
     log(f"max_chars_per_font={max_chars_per_font}, num_workers={num_workers}")
     log(f"char_count={char_count}  (None=全部, 数字=取前 N 字)")
@@ -238,12 +262,18 @@ def main():
     log("[Step 2] 启动训练...", log_file)
     start_params = {
         "output_dir": data_dir,
+        # 续训起点 = config.jsonc 的 resumeFrom（否则 train_manager 会自己挑走
+        # output_dir 里的 checkpoint-last.pth，导致「想从 best 续」实际从 last 续）
+        "resume_checkpoint": resume_from or None,
         "data_path": data_dir,
         "test_npz_path": test_npz,
         "base_checkpoint": paths["baseCheckpoint"],
         "source_font": paths["sourceFont"],
         "epochs": target_epochs,
         "batch_size": batch_size,
+        "lr": lr_val,  # None = 不传 --lr，走引擎默认缩放
+        "lr_schedule": lr_schedule,
+        "min_lr": min_lr,
         "lora_r": lora_r,
         "lora_alpha": lora_alpha,
         "cfg": cfg_scale,
