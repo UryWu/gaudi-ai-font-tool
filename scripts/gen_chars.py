@@ -37,6 +37,8 @@ from pathlib import Path
 # ============================================================================
 
 # —— 模型位置（个人字迹训练产出的 checkpoint）——
+# 生字推荐用 checkpoint-best.pth（loss 最小、效果最好）
+# 若批次内还没有 best（训练中未出现更小 loss），用 checkpoint-last.pth（最新一轮）
 CHECKPOINT = r"G:\Projects\projects_ai\gaudi-ai-font-tool\model\run\train_images_20260910_160142\checkpoint-last.pth"
 
 # —— REF_FONT（基本字库） vs SOURCE_FONT（源字体） ——
