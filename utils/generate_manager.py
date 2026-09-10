@@ -239,11 +239,11 @@ class GenerateManager:
                         shutil.rmtree(work_dir, ignore_errors=True)
                         continue
 
-                    # 生成图片
-                    gen_dir = os.path.join(work_dir, "generated")
-                    self._run_generate_cmd(checkpoint, temp_npz, gen_dir, num_samples, cfg, batch_size)
+                    # 生成图片：引擎会在 --output_dir 下再建 <params>/generated/，故直接传 work_dir
+                    self._run_generate_cmd(checkpoint, temp_npz, work_dir, num_samples, cfg, batch_size)
 
-                    png_files = self._find_png_files(gen_dir)
+                    # 引擎实际写到 <work_dir>/<params>/generated/*.png，递归整个 work_dir 找
+                    png_files = self._find_png_files(work_dir)
                     if not png_files:
                         shutil.rmtree(work_dir, ignore_errors=True)
                         continue
@@ -251,22 +251,33 @@ class GenerateManager:
                     # OCR验证
                     ocr_results = self._ocr_verify(png_files)
 
-                    # 筛选最佳
-                    pat = re.compile(r'^(?:uni|u)([0-9A-Fa-f]+)')
+                    # 筛选最佳：引擎 generate_chars 用 "<rank>_U+XXXX.png" 命名
+                    pat = re.compile(r'(?:uni|u|U\+)([0-9A-Fa-f]+)')
+                    # 注意：re.match 即使 pat 不带 ^ 也从开头匹配，所以这里用 search
                     char_best = {}
+
+                    # 调试 dump
+                    self.round_log.append(
+                        f"DEBUG: png_files={len(png_files)}, ocr_results={len(ocr_results)}, "
+                        f"threshold={threshold}, codepoint_to_char={codepoint_to_char}"
+                    )
 
                     for path in png_files:
                         fname = os.path.basename(path)
-                        m = pat.match(fname)
+                        m = pat.search(fname)
                         if not m:
+                            self.round_log.append(f"DEBUG skip(pat no match): {fname}")
                             continue
                         code = int(m.group(1), 16)
                         if code not in codepoint_to_char:
+                            self.round_log.append(f"DEBUG skip(code not in codepoint_to_char): {fname} -> {hex(code)}")
                             continue
                         conf = ocr_results.get(path, 0)
                         if conf >= threshold:
                             if code not in char_best or conf > char_best[code][1]:
                                 char_best[code] = (path, conf)
+                        else:
+                            self.round_log.append(f"DEBUG skip(conf<threshold): {fname} conf={conf}")
 
                     # 复制成功的（FontLab命名：默认带汉字后缀）
                     round_success = 0
@@ -400,10 +411,17 @@ class GenerateManager:
         try:
             self._current_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ZI2ZI_DIR)
             self._save_pid(self._current_process.pid)
-            self._current_process.wait(timeout=1800)
-            return self._current_process.returncode == 0
+            out, err = self._current_process.communicate(timeout=1800)
+            rc = self._current_process.returncode
+            tail_out = (out or b'').decode('utf-8', errors='replace')[-800:]
+            tail_err = (err or b'').decode('utf-8', errors='replace')[-800:]
+            # 任何 rc 都 dump 末尾，便于排查
+            debug = f"rc={rc} | stdout_tail: {tail_out[-300:]} | stderr_tail: {tail_err[-300:]}"
+            self.round_log.append(f"generate_chars 调试: {debug}")
+            return rc == 0
         except subprocess.TimeoutExpired:
             self._current_process.kill()
+            self.round_log.append("generate_chars 超时（>30min），已终止")
             return False
         finally:
             self._current_process = None
@@ -417,10 +435,34 @@ class GenerateManager:
                     files.append(os.path.join(root, f))
         return files
 
+    def _ocr_available(self) -> bool:
+        """检查 OCR_PYTHON 解释器是否存在（PaddleOCR 环境）"""
+        import os
+        p = OCR_PYTHON
+        if not p or not os.path.isfile(p):
+            return False
+        # 快速探测 paddleocr 是否可 import（避免每次生成都跑一次失败子进程）
+        try:
+            import subprocess
+            r = subprocess.run(
+                [p, "-c", "import paddleocr"],
+                capture_output=True, text=True, timeout=20
+            )
+            return r.returncode == 0
+        except Exception:
+            return False
+
     def _ocr_verify(self, img_paths):
-        """OCR置信度验证"""
+        """OCR置信度验证
+
+        降级策略：若 OCR 环境不可用（OCR_PYTHON 未装），返回全部置信度 1.0
+        → 主流程每字取第一张通过，不因缺 OCR 而整批 0 成功。
+        """
         if not img_paths:
             return {}
+        if not self._ocr_available():
+            self.round_log.append("OCR 环境不可用，跳过 OCR 筛选（每字取第一张）")
+            return {p: 1.0 for p in img_paths}
 
         # 分批处理，每批100个
         batch_size = 100
