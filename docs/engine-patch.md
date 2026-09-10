@@ -95,7 +95,8 @@
 **关键设计——best 跨续训持久化：**
 - best loss 存 `<批次>/.logs/best_loss.txt`
 - 续训时先读该文件；**若不存在**（例如首次启用本补丁），则
-  `_seed_best_loss_from_logs` 解析历史 `train_*.log`，按 epoch 取轮末平均 loss 的最小值
+  `_seed_best_loss_from_logs` 解析历史 `train_*.log`，按 epoch 取轮末平均 loss 的最小值，
+  并**立即写入 `best_loss.txt`**（避免下次再依赖日志；日志被清理也不丢历史基准）
 - 这样**续训首轮即使变差，也不会被误当作 best 覆盖**
 
 **验证（两种分支均已实测）：**
