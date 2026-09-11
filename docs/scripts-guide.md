@@ -12,8 +12,15 @@
 | **生成字（独立）** | `scripts/gen_chars.ps1` → `gen_chars.py` | 同上 | `gen_chars.py` 顶部 CONFIG 区 |
 | **训练（API）** | `scripts/train-via-api.ps1` | 同上 | ps1 顶部变量 |
 | **生成字（API）** | （在 Flask UI 触发） | http://localhost:7550/generate | — |
+| **字频统计** | `scripts/char_freq.py` | `python scripts/char_freq.py <文件>` | 命令行参数 |
+| **书写清单** | `scripts/make_write_list.py` | `python scripts/make_write_list.py --font ... --doc ... --out ...` | 命令行参数 |
+| **建变体字体** | `scripts/build_variant_ttf.py` | `python scripts/build_variant_ttf.py --base-ttf ... --images-dir ... --out ...` | 命令行参数 |
+| **生成渲染副本** | `scripts/make_variant_text.py` | `python scripts/make_variant_text.py <原稿> --map ... --out ...` | 命令行参数 |
 
 > **独立脚本 vs API 脚本**：独立脚本直接调引擎/Python 模块，**无需启 Flask**。API 脚本走 Flask REST 接口，需要后端在跑。
+
+> **个人字库建设工具组**（后 4 个）：串成「统计缺口 → 出书写清单 → 补字 → 建带变体的字体 → 生成渲染副本」一条链。
+> 详见 [font-variants.md](font-variants.md)。
 
 ---
 
@@ -204,6 +211,61 @@ BATCH_SIZE = 4
 ```bash
 powershell -ExecutionPolicy Bypass -File stop-ai-font-port-7550.ps1
 ```
+
+---
+
+## 7. 个人字库建设工具组（4 个脚本）
+
+串成「统计缺口 → 出书写清单 → 补字 → 建带变体的字体 → 生成渲染副本」一条链。
+**完整说明（含 PUA 变体机制、为什么不用 IVS、实测标定数据）见 [font-variants.md](font-variants.md)。**
+
+### `scripts/char_freq.py` — 字频统计 + 覆盖率
+
+```bash
+python scripts/char_freq.py <文档> [--top 50] [--out 报告.txt] [--charset 字符表.csv] [--font 字库.ttf]
+```
+
+- 分类统计（汉字/数字/字母/中文标点/西文标点/空白）+ 高频表 + **汉字累积覆盖率** + GB2312/GBK 对标
+- **`--font`**：额外输出「本文档 vs 该字库」的覆盖率与缺失字清单（口径 = 汉字+数字+中文标点）
+- **`--charset`**：导出去重字符表 CSV，含 `in_font` 列 → **补字清单 = 筛 `in_font=False`**
+
+### `scripts/make_write_list.py` — 书写清单
+
+```bash
+python scripts/make_write_list.py --font 现有字库.ttf --doc <文档> --out 书写清单.csv [--limit N] [--uniform N]
+```
+
+按文档字频降序算出**该补哪些字**，并**按字频分档**给出每个字建议写几种写法
+（≥800 次→8 种 / ≥300→6 / ≥100→5 / ≥30→4 / ≥10→3 / ≥3→2 / 其余 1）。
+数字 0-9 **强制全含**，不受 `--limit` 截断。
+
+**输出 CSV 列**：`priority, char, unicode, category, count, variants_to_write, glyph_name`
+
+> ⚠️ **写的时候把同一个字的多种写法连着写** —— 过 preprocess 的 OCR 后会自动导出成
+> `uniXXXX.png` + `uniXXXX_01.png`… 天然就是变体序列，无需人工标注对应关系。
+
+### `scripts/build_variant_ttf.py` — 构建带 PUA 变体的字体
+
+```bash
+python scripts/build_variant_ttf.py --base-ttf 现有字库.ttf \
+    --images-dir "G:\...\exported\<时间戳>" \
+    --out 新字库.ttf --map-out font/variant_map.json [--epsilon 0.3]
+```
+
+- **已有字形逐指令原样复制**（零质量损失），只有**新增变体**走矢量化（`cv2` + `TTGlyphPen`）
+- 变体挂到 PUA（`U+E000` 起），一个 TTF 装下全部写法；同时产出变体映射表 JSON
+- **不覆盖 `--base-ttf`**（那份被 `gen_chars.py` 的 `REF_FONT` 与 AI 流程引用）
+
+### `scripts/make_variant_text.py` — 生成渲染副本
+
+```bash
+python scripts/make_variant_text.py 原稿.txt --map font/variant_map.json --out 渲染副本.txt [--seed 42]
+```
+
+把正文里的一部分字随机换成它的变体码点，**同一个字在文章不同位置就是不同写法**。
+
+> ⚠️ **副本不再可读**（PUA 码点在编辑器里是空白框），所以只在副本上做，原稿不动。
+> 且只有写了多种写法的字才有变体（当前覆盖 50 个字符）。
 
 ---
 

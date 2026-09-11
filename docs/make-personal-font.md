@@ -85,6 +85,11 @@ FontLab 标准命名的字符 PNG（uni4E00_一.png）
 - **fontTools**：Python 脚本化（适合批量或 CI 流）
 - 命名格式建议遵循 FontLab 标准（`uni4E00` / `u20000` 等）
 
+> 💡 **本项目已自带脚本**：`scripts/build_variant_ttf.py` 能从「基础字体 + PNG 素材目录」直接
+> 构建 TTF，而且**能把同一个字的多份手写（如「的」25 种写法）全部装进同一个字体** ——
+> 标准 cmap 一对一映射装不下变体，它会把变体挂到 PUA 码点上。
+> 这一路由 FontLab 手工做会丢掉全部变体。详见 [font-variants.md](font-variants.md)。
+
 ### ⑦ AI 补全生僻字（本项目 7550）
 
 **工具：本项目 gaudi-ai-font-tool（端口 7550）**
