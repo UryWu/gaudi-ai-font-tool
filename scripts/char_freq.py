@@ -20,22 +20,28 @@
       （如整个语料库）O(n) 与 O(n·u) 的差距会线性放大
 
 用法：
-  python scripts/char_freq.py <文件> [--top 50] [--out 报告.txt] [--charset 字符表.csv]
+  python scripts/char_freq.py <文件> [--top 50] [--out 报告.txt]
+                                   [--charset 字符表.csv] [--font 字库.ttf]
 
   --top     高频表显示条数（默认 50）
   --out     把完整报告写入文件（默认只打印到控制台）
+  --font    一个 TTF 路径：额外输出「本文档 vs 该字库」的覆盖率与缺失字清单
+            口径 = 建字库口径；缺失字按文档字频降序，直接就是「该补写哪些字」
   --charset 额外导出「去重非空白字符表」CSV（制字 / 建 TTF 用），列为:
-              unicode, char, category, glyph_name, png_filename, count
+              unicode, char, category, glyph_name, png_filename, count, in_font
             glyph_name  = uni4E00 / u20000     ← TTF 里的字形名
             png_filename= uni4E00_一.png       ← 预处理工具导出的 PNG 名
             category    = 汉字/数字/字母/中文标点/西文标点/空白/其他
                           建字库口径: category in (汉字, 数字, 中文标点)
                           （中文标点按东亚宽度 W/F/A 判定, 故 “”‘’—… 算中文标点,
                             而 Markdown 的 # | -&gt; * . % / 算西文标点, 自然被筛掉）
+            in_font     = 该字符是否已被 --font 字库收录（未给 --font 时为空）
+                          → 补字清单 = 筛 category 属建字库口径 且 in_font=False
             以 utf-8-sig 写出, Excel 双击不乱码
 
 依赖：
   - utils/charset_utils.py（is_cjk / fontlab_filename / GB2312·GBK 字符集）
+  - fontTools（仅 --font 时用，读原始 cmap）
   - 标准库 collections / unicodedata
 """
 
@@ -58,6 +64,10 @@ ENCODINGS = ('utf-8-sig', 'utf-8', 'gb18030')
 DIGITS = set('0123456789０１２３４５６７８９')
 
 CATEGORIES = ('汉字', '数字', '字母', '中文标点', '西文标点', '空白', '其他')
+
+# 「建字库口径」：判断一套字库能不能排出这篇文档时只算这几类。
+# 西文标点（Markdown 的 # | - > * . % / 等）与拉丁字母是文档格式产物，排版前会清掉。
+FONT_SCOPE = ('汉字', '数字', '中文标点')
 
 
 def read_text(path):
@@ -139,10 +149,36 @@ def main():
     ap.add_argument('--top', type=int, default=50, help='高频表显示条数（默认 50）')
     ap.add_argument('--out', default='', help='把完整报告写入该文件（默认只打印）')
     ap.add_argument('--charset', default='', help='导出去重字符表（制字用）到该文件')
+    ap.add_argument('--font', default='',
+                    help='TTF 路径：额外输出「本文字符 vs 该字库」的覆盖率与缺失字清单')
     args = ap.parse_args()
 
     if not os.path.isfile(args.file):
         sys.exit(f'文件不存在: {args.file}')
+
+    # 若给了 --font，先读入该字库的字符集（报告与 CSV 共用）
+    font_chars = set()
+    font_han = 0
+    if args.font:
+        if not os.path.isfile(args.font):
+            sys.exit(f'字体不存在: {args.font}')
+        from fontTools.ttLib import TTFont
+        from utils.charset_utils import is_cjk
+        try:
+            _ft = TTFont(args.font)
+            _cmap = _ft.getBestCmap() or {}
+            _ft.close()
+        except Exception as e:
+            sys.exit(f'读取字体失败: {args.font}: {e}')
+        # ★ 这里读**原始 cmap**，不能用 utils.charset_utils.get_font_chars()：
+        #   那个函数按设计只返回「汉字」，内部用 is_cjk 过滤，而 CJK_RANGES 不含
+        #   。(U+3002) 、， (U+FF0C) ！？ 等 CJK 标点 —— 会把字库里明明有的高频标点
+        #   误判成「缺失」（实测会低估覆盖率约 7 个百分点）。
+        #   is_cjk 只用在这里做「其中多少个是汉字」的统计，不当过滤条件。
+        #   另注：将来的 PUA 变体码点（U+E000+）不是 CJK，但每个字的主码点仍在 cmap 里，
+        #   所以不会把「已收录」误判成缺失（详见 docs/font-variants.md）。
+        font_chars = {chr(cp) for cp in _cmap}
+        font_han = sum(1 for c in font_chars if is_cjk(ord(c)))
 
     t0 = time.perf_counter()
     text, enc = read_text(args.file)
@@ -257,6 +293,49 @@ def main():
         w(f'（跳过标准字符集对比: {e}）')
         w('')
 
+    # ---- 对标个人字库 TTF（这套字能不能排出这篇文档）----
+    # 口径 = 建字库口径（汉字 + 数字 + 中文标点）：Markdown 符号与拉丁字母是文档格式产物，
+    # 排版前会被清掉，不该算进「字库够不够用」。
+    if args.font:
+        scope = [c for c in freq if cats[c] in FONT_SCOPE]
+        scope.sort(key=lambda c: (-freq[c], ord(c)))
+        have = [c for c in scope if c in font_chars]
+        miss = [c for c in scope if c not in font_chars]
+        n_scope = sum(freq[c] for c in scope)
+        n_miss = sum(freq[c] for c in miss)
+        n_have = n_scope - n_miss
+        w('-' * 74)
+        w('对标个人字库 TTF（口径: 汉字 + 数字 + 中文标点）')
+        w('-' * 74)
+        w(f'字库         : {os.path.abspath(args.font)}')
+        w(f'字库收录字符 : {len(font_chars):,}   '
+          f'（其中汉字 {font_han:,}，其余 {len(font_chars)-font_han:,} 为标点/数字/字母）')
+        w('')
+        w(f'本文档该口径字符 : {len(scope):,} 个 / 出现 {n_scope:,} 次')
+        w(f'  ├ 字库已收录  : {len(have):>6,} 个   '
+          f'覆盖 {n_have/n_scope*100:>6.2f}% 的字符出现次数')
+        w(f'  └ ★ 还需补写  : {len(miss):>6,} 个   '
+          f'占 {n_miss/n_scope*100:>6.2f}%')
+        w('')
+        if miss:
+            w('补齐建议（按文档字频降序，前 N 个缺失字能盖住多少）:')
+            w(f'{"补写字数":>10}{"新增覆盖次数":>16}{"新增覆盖率":>12}{"累计覆盖率":>12}')
+            marks = [50, 100, 200, 300, 500, 800, 1000, 1500, 2000, 3000, 4000]
+            marks = [m for m in marks if m < len(miss)] + [len(miss)]
+            for m in marks:
+                add = sum(freq[c] for c in miss[:m])
+                w(f'{m:>10,}{add:>16,}{add/n_scope*100:>11.2f}%'
+                  f'{(n_have+add)/n_scope*100:>11.2f}%'
+                  + ('   ← 补满' if m == len(miss) else ''))
+            w('')
+            w('缺失字（按字频降序）:')
+            show, per_row = miss[:200], 40
+            for i in range(0, len(show), per_row):
+                w('  ' + ''.join(show[i:i + per_row]))
+            if len(miss) > len(show):
+                w(f'  ...（共 {len(miss):,} 个，完整清单筛 --charset 导出 CSV 的 in_font 列）')
+        w('')
+
     report = '\n'.join(out)
     print(report)
 
@@ -274,16 +353,18 @@ def main():
         with open(args.charset, 'w', encoding='utf-8-sig', newline='') as f:
             wr = csv.writer(f)
             wr.writerow(['unicode', 'char', 'category',
-                         'glyph_name', 'png_filename', 'count'])
+                         'glyph_name', 'png_filename', 'count', 'in_font'])
             for c in chars:
                 cp = ord(c)
                 wr.writerow([
                     f'U+{cp:04X}',            # 码点
                     c,                         # 字符本身
-                    cats[c],                   # 汉字/数字/字母/标点符号/其他 → 可用来过滤
+                    cats[c],                   # 汉字/数字/字母/中文标点/西文标点/其他
                     fontlab_filename(cp)[:-4], # uni4E00 / u20000     ← TTF 字形名
                     fontlab_filename(cp, c),   # uni4E00_一.png       ← 预处理导出的 PNG 名
                     freq[c],                   # 出现次数
+                    # 是否已被 --font 指定的字库收录（'' = 未给 --font）
+                    (c in font_chars) if args.font else '',
                 ])
         print(f'字符表(CSV)已写入: {os.path.abspath(args.charset)} （{len(chars):,} 字符）')
 
