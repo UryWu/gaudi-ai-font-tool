@@ -43,10 +43,15 @@ def _open_image_white(path: str, size: int) -> 'PIL.Image.Image':
 
 
 def _load_source_renderer(source_font: str, resolution: int):
-    """加载 source 渲染器（用 fontTools + PIL，因为 zi2zi 引擎依赖重型）
+    """加载 ref 网格渲染器（用 fontTools + PIL，因为 zi2zi 引擎依赖重型）
 
     返回 (render_fn, available_chars_set)
     render_fn(codepoint: int) -> PIL.Image.Image or None
+
+    ★ 必须**按墨迹居中**，不能按 pen origin 对齐：
+      个人字库 TTF 的 lsb 逐字不同（如「一」149、「中」500），
+      若直接 draw.text 到布局框，所有字形都会整体左移 lsb 那么多。
+      （2026-09-12 gaudi-font-preprocess 重做字体度量后确认；旧版字体 lsb=0 时无此问题）
     """
     from fontTools.ttLib import TTFont
     from PIL import Image, ImageDraw, ImageFont
@@ -68,12 +73,11 @@ def _load_source_renderer(source_font: str, resolution: int):
         ch = chr(cp)
         img = Image.new('L', (resolution, resolution), 255)
         draw = ImageDraw.Draw(img)
-        # 用 fontTools 的 metrics 计算居中
         try:
-            ascent, descent = pil_font.getmetrics()
-            text_width = draw.textlength(ch, font=pil_font)
-            x = (resolution - text_width) // 2
-            y = (resolution - ascent) // 2
+            # bbox 相对锚点，左上角是第 1、2 项
+            bx0, by0, bx1, by1 = draw.textbbox((0, 0), ch, font=pil_font)
+            x = (resolution - (bx1 - bx0)) // 2 - bx0
+            y = (resolution - (by1 - by0)) // 2 - by0
         except Exception:
             x = resolution // 4
             y = resolution // 4
