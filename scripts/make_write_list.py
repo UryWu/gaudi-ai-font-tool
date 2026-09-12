@@ -21,13 +21,26 @@
   不需要任何人工标注对应关系。
 
 用法：
+  # 单篇
   python scripts/make_write_list.py --font font/my_personal_font.ttf \\
-      --doc "F:\\Files\\入党\\入党积极分子思想汇报_3000字左右.md" --out 书写清单.csv
+      --doc "F:\\Files\\入党\\xxx.md" --out 书写清单.csv
+
+  # 多篇（字频合并累计）
+  python scripts/make_write_list.py --font font/my_personal_font.ttf \\
+      --doc 心得.md 申请书.md --out 书写清单_心得_申请书.csv
+
+  # ★ 追加新文档时：先排除已排进历史清单的字（支持通配符）
+  python scripts/make_write_list.py --font font/my_personal_font.ttf \\
+      --doc 新文档.md --exclude-csv "书写清单*.csv" --out 书写清单_新文档.csv
+
+  # 盘点已写字形（不从文档算，纯粹统计素材目录里写了什么）
+  python scripts/make_write_list.py --images-dir "G:\\...\\exported\\<时间戳>" \\
+      --out 已写清单.csv
 
   # 先只写优先级最高的 300 个字
   python scripts/make_write_list.py --font ... --doc ... --limit 300 --out 清单_前300.csv
 
-输出 CSV 列：
+输出 CSV 列（--doc 模式）：
   priority            描写优先级（1 = 最先写）
   char / unicode      目标字 / 码点
   category            汉字 / 数字 / 中文标点
@@ -35,6 +48,9 @@
   variants_to_write   建议写几种写法
   glyph_name          将来在字体里的字形名（uniXXXX）
   以 utf-8-sig 写出，Excel 双击不乱码
+
+输出 CSV 列（--images-dir 模式）：
+  priority, char, unicode, category, png_count, variants_written, glyph_name, png_files
 
 依赖：
   - scripts/char_freq.py（复用 read_text / classify / FONT_SCOPE，不重写）
@@ -44,7 +60,9 @@
 
 import argparse
 import csv
+import glob
 import os
+import re
 import sys
 from collections import Counter
 
@@ -84,17 +102,42 @@ def load_font_chars(ttf_path):
     return {chr(cp) for cp in cmap}
 
 
-def build_list(doc_path, font_chars, limit=0, uniform=0):
+def load_csv_chars(csv_path):
+    """读一份书写清单 CSV，取出其中的 char 列（用于 --exclude-csv）
+
+    只认表头里有 `char` 列的 CSV；读不出内容就返回空集（不报错，避免挡住主流程）。
+    """
+    charset = set()
+    try:
+        with open(csv_path, 'r', encoding='utf-8-sig', newline='') as f:
+            for row in csv.DictReader(f):
+                ch = (row.get('char') or '').strip()
+                if len(ch) == 1:
+                    charset.add(ch)
+    except Exception as e:
+        print(f'⚠️ 读取 --exclude-csv 失败（忽略）: {csv_path}: {e}')
+    return charset
+
+
+def build_list(doc_paths, font_chars, limit=0, uniform=0, exclude=None):
     """按文档字频降序算出待补字清单
+
+    Args:
+        doc_paths: 一到多篇文档；多篇时字频**合并累计**（同一字在多篇里的出现次数相加）
+        font_chars: 字库已有字符（排除）
+        exclude: 额外要排除的字符（如已排进其他书写清单的字）
 
     Returns: [(char, codepoint, category, count, variants), ...]
     """
-    text, _enc = read_text(doc_path)
-    freq = Counter(text)
+    freq = Counter()
+    for p in doc_paths:
+        text, _enc = read_text(p)
+        freq.update(text)          # 多篇合并计数（出现次数相加）
 
+    skip = set(font_chars) | set(exclude or ())
     scope = [c for c in freq if classify(c) in FONT_SCOPE]
     scope.sort(key=lambda c: (-freq[c], ord(c)))
-    missing = [c for c in scope if c not in font_chars]
+    missing = [c for c in scope if c not in skip]
 
     if limit > 0:
         head = missing[:limit]
@@ -106,13 +149,45 @@ def build_list(doc_path, font_chars, limit=0, uniform=0):
             for c in missing]
 
 
+def build_written_list(images_dir, uniform=0):
+    """--images-dir 模式：统计**已经写好**的字形（从素材 PNG 目录）
+
+    与 build_list 的区别：这里不是「算出还缺什么」，而是「盘点已经写了什么」。
+    每个字实际写了几种 = 该字在目录里的 PNG 张数（`uniXXXX.png` + `uniXXXX_NN.png`…）。
+    PNG 文件名里带 `_NN` 的就是变体序号（见 docs/font-variants.md）。
+
+    Returns: [(char, codepoint, category, png_count, variants, filenames), ...]
+    """
+    pat = re.compile(r'^u(?:ni)?([0-9A-Fa-f]{4,6})(?:_(\d+))?\.png$')
+    per_char = {}
+    for name in sorted(os.listdir(images_dir)):
+        m = pat.match(name)
+        if not m:
+            continue
+        cp = int(m.group(1), 16)
+        per_char.setdefault(cp, []).append(name)
+    # 按 PNG 张数降序（= 写得最多的字在前），同数按码点升序
+    items = []
+    for cp, files in sorted(per_char.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        items.append((chr(cp), cp, classify(chr(cp)), len(files),
+                      len(files) if uniform <= 0 else uniform, files))
+    return items
+
+
 def main():
     ap = argparse.ArgumentParser(
         description='书写清单生成（算出该补写哪些字、每个字写几种写法）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    ap.add_argument('--font', required=True, help='当前字库 TTF（用它判断哪些字还缺）')
-    ap.add_argument('--doc', required=True, help='目标文档（.md/.txt）')
+    ap.add_argument('--font', default='',
+                    help='当前字库 TTF（用它判断哪些字还缺）')
+    ap.add_argument('--doc', default=[], nargs='+',
+                    help='目标文档（可给多篇；多篇时字频合并累计）')
+    # 注意：action='append' 不能配 default=''（argparse 会把字符串当列表 append）
+    ap.add_argument('--exclude-csv', action='append',
+                    help='额外的排除清单 CSV（可重复、支持通配符；如 "书写清单*.csv"）')
+    ap.add_argument('--images-dir', default='',
+                    help='改为盘点模式：统计该素材目录里**已经写好**的字形（不从文档算）')
     ap.add_argument('--out', required=True, help='书写清单 CSV 输出路径')
     ap.add_argument('--limit', type=int, default=0,
                     help='只取优先级最高的前 N 个字（0 = 全部；数字 0-9 不受此限制）')
@@ -120,12 +195,55 @@ def main():
                     help='每个字强制写这么多种（0 = 用字频分档）')
     args = ap.parse_args()
 
-    for p, label in ((args.font, '字库'), (args.doc, '文档')):
+    # ---- 盘点模式：统计已写字形 ----
+    if args.images_dir:
+        if not os.path.isdir(args.images_dir):
+            sys.exit(f'素材目录不存在: {args.images_dir}')
+        written = build_written_list(args.images_dir)
+        with open(args.out, 'w', encoding='utf-8-sig', newline='') as f:
+            wr = csv.writer(f)
+            wr.writerow(['priority', 'char', 'unicode', 'category',
+                         'png_count', 'variants_written', 'glyph_name', 'png_files'])
+            for i, (ch, cp, cat, n_png, n, files) in enumerate(written, 1):
+                wr.writerow([i, ch, f'U+{cp:04X}', cat, n_png, n,
+                             fontlab_filename(cp)[:-4], ';'.join(files)])
+        tot = sum(n for *_x, n, _f in written)
+        multi = sum(1 for *_x, n, _f in written if n > 1)
+        print(f'盘点目录  : {os.path.abspath(args.images_dir)}')
+        print(f'已写字形  : {tot:,} 个（{len(written):,} 个不同字）')
+        print(f'有多种写法的字: {multi:,} 个')
+        print(f'\n已写清单已写入: {os.path.abspath(args.out)}')
+        return
+
+    # ---- 正常模式：从文档算还需补哪些字 ----
+    if not args.font:
+        sys.exit('--font 必填（或用 --images-dir 走盘点模式）')
+    if not args.doc:
+        sys.exit('--doc 必填（或用 --images-dir 走盘点模式）')
+    if not os.path.isfile(args.font):
+        sys.exit(f'字库不存在: {args.font}')
+    for p in args.doc:
         if not os.path.isfile(p):
-            sys.exit(f'{label}不存在: {p}')
+            sys.exit(f'文档不存在: {p}')
+
+    exclude = set()
+    for pattern in (args.exclude_csv or []):
+        # 支持通配符：--exclude-csv "书写清单*.csv" 可一次排除全部历史清单
+        matched = sorted(glob.glob(pattern)) if any(c in pattern for c in '*?[') else [pattern]
+        if not matched:
+            print(f'⚠️ --exclude-csv 没匹配到文件（忽略）: {pattern}')
+            continue
+        for c in matched:
+            if not os.path.isfile(c):
+                sys.exit(f'排除清单不存在: {c}')
+            got = load_csv_chars(c)
+            exclude |= got
+            print(f'排除清单  : {os.path.basename(c)} → {len(got):,} 字')
+    if exclude:
+        print(f'排除合计  : {len(exclude):,} 字')
 
     items = build_list(args.doc, load_font_chars(args.font),
-                       args.limit, args.uniform)
+                       args.limit, args.uniform, exclude)
 
     with open(args.out, 'w', encoding='utf-8-sig', newline='') as f:
         wr = csv.writer(f)
@@ -137,7 +255,8 @@ def main():
 
     total_glyphs = sum(n for *_x, n in items)
     print(f'字库      : {os.path.abspath(args.font)}')
-    print(f'文档      : {os.path.abspath(args.doc)}')
+    for p in args.doc:
+        print(f'文档      : {os.path.abspath(p)}')
     print(f'需补字    : {len(items):,} 个，共写 {total_glyphs:,} 个字形')
     if args.uniform:
         print(f'写法数    : 一律 {args.uniform} 种（--uniform）')

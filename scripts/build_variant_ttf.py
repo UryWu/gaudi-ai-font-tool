@@ -55,6 +55,7 @@ base 字体本身就是密集多边形风格，密度接近才能在排版里观
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -64,9 +65,17 @@ from collections import defaultdict
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 
-# —— 实测标定：现有字体的字形度量归一化规则（152/152 命中，±2 单位）——
-#    等比缩放装进 BOX_W×BOX_H，锚点 (xmin=0, ymin=BOX_YMIN)，advance = 缩放后宽度
-BOX_W, BOX_H, BOX_YMIN = 1749, 1659, 102
+# —— 实测标定（2026-09-12 重做版 font/my_personal_font.ttf，含方向修复）——
+#    源图**整张画布**等比线性映射到 0.9 em 并居中：
+#        font_x = OFF + src_x    × K
+#        font_y = OFF + (H − src_y) × K        （y 轴翻转）
+#      K = 0.9 × unitsPerEm / 画布边长,  OFF = (unitsPerEm − 0.9 × unitsPerEm) / 2
+#    且 **advance 统一 = unitsPerEm**（CJK 等宽方格），lsb = xMin。
+#    该规则在 191/191 个字形上完全命中（±3 单位，含贴在角落的标点）。
+#    ★ 因为是「整张画布」映射，变体的 PNG 与主字形的 PNG 用同一个变换即可自然对齐，
+#      不需要按墨迹 bbox 对齐（早期版本用 bbox 对齐，遇到贴角标点会错位）。
+#    ⚠️ 若 gaudi-font-preprocess 再次重做字体度量，这两行常量需重新标定。
+CANVAS_SCALE = 0.9
 
 PUA_START, PUA_END = 0xE000, 0xF8FF
 
@@ -106,13 +115,24 @@ def mask_bbox(bw):
     return (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
 
 
-def fit_box_bbox(src_bbox):
-    """等比装箱规则 → 字体坐标下的目标 bbox（用于 base 里没有主字形的字）"""
-    x0, y0, x1, y1 = src_bbox
-    pw, ph = max(x1 - x0, 1), max(y1 - y0, 1)
-    scale = min(BOX_W / pw, BOX_H / ph)
-    w, h = pw * scale, ph * scale
-    return (0.0, float(BOX_YMIN), w, BOX_YMIN + h)
+def _canvas_of(arr, upm):
+    """便捷包装：从图像数组取画布尺寸并返回变换参数（展开成 4 个值）"""
+    kx, ox, ky, oy = canvas_transform(arr.shape[1], arr.shape[0], upm)
+    return kx, ox, ky, oy
+
+
+def canvas_transform(img_w, img_h, upm):
+    """源图画布 → 字体坐标的线性映射参数 (kx, ox, ky, oy)
+
+    实测规则：整张画布等比映射到 CANVAS_SCALE em 并居中。
+        font_x = ox + src_x * kx
+        font_y = oy + (img_h − src_y) * ky
+    """
+    kx = CANVAS_SCALE * upm / img_w
+    ky = CANVAS_SCALE * upm / img_h
+    ox = (upm - CANVAS_SCALE * upm) / 2.0
+    oy = (upm - CANVAS_SCALE * upm) / 2.0
+    return kx, ox, ky, oy
 
 
 def _signed_area(pts):
@@ -125,10 +145,10 @@ def _signed_area(pts):
     return s / 2.0
 
 
-def vectorize(png_path, dst_bbox, epsilon, cache=None):
-    """PNG 字形 → TTGlyph，并按 dst_bbox（字体坐标）对齐
+def vectorize(png_path, kx, ox, ky, oy, canvas_h, epsilon, cache=None):
+    """PNG 字形 → TTGlyph，按「整张画布线性映射」变换到字体坐标
 
-    Returns: (glyph, 点数) 或 (None, 0)（PNG 是空白图）
+    Returns: (glyph, 点数, xmin) 或 (None, 0, 0)（PNG 是空白图）
     cache: 可选的 {png_path: (bw, src_bbox)} 复用已读的二值图
     """
     import cv2
@@ -146,30 +166,30 @@ def vectorize(png_path, dst_bbox, epsilon, cache=None):
         if cache is not None:
             cache[key] = (bw, src_bbox)
     if src_bbox is None:
-        return None, 0
+        return None, 0, 0
 
     cnts, hier = cv2.findContours(bw, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
     if not cnts:
-        return None, 0
-
-    sx0, sy0, sx1, sy1 = src_bbox
-    dx0, dy0, dx1, dy1 = dst_bbox
-    sw, sh = max(sx1 - sx0, 1), max(sy1 - sy0, 1)
-    dw, dh = dx1 - dx0, dy1 - dy0
+        return None, 0, 0
 
     pen = TTGlyphPen(None)
     n_pts = 0
+    xmin = None
     for i, c in enumerate(cnts):
         poly = cv2.approxPolyDP(c, epsilon, True)[:, 0, :]
         if len(poly) < 3:
             continue
         # 图像坐标(y 向下) → 字体坐标(y 向上)
+        # floor/ceil 而非 round：保证墨迹 bbox 被算出的 bbox 包住，
+        # 否则 lsb/xMin 会差 1 单位（新字体要求 lsb == xMin）
         fs = []
         for px, py in poly:
-            fx = int(round(dx0 + (px - sx0) * dw / sw))
-            fy = int(round(dy1 - (py - sy0) * dh / sh))
+            fx = math.floor(ox + px * kx)
+            fy = math.ceil(oy + (canvas_h - py) * ky)
             if not fs or fs[-1] != (fx, fy):
                 fs.append((fx, fy))
+        if xmin is None or fs[0][0] < xmin:
+            xmin = min(f[0] for f in fs)
         if len(fs) >= 2 and fs[0] == fs[-1]:
             fs.pop()
         if len(fs) < 3:
@@ -185,8 +205,8 @@ def vectorize(png_path, dst_bbox, epsilon, cache=None):
         n_pts += len(fs)
 
     if n_pts == 0:
-        return None, 0
-    return pen.glyph(), n_pts
+        return None, 0, 0
+    return pen.glyph(), n_pts, xmin
 
 
 def glyph_bbox(font, glyph_set, glyph_name):
@@ -197,23 +217,15 @@ def glyph_bbox(font, glyph_set, glyph_name):
     return bp.bounds
 
 
-def measure_side_bearing(glyph_set, cmap, hmtx):
-    """量出 base 字体的侧边距：advance - bbox宽度 的中位数
+def detect_uniform_advance(cmap, hmtx, upm):
+    """判断 base 字体是否「advance 统一 = unitsPerEm」（新版字体的规则）
 
-    ⚠️ 实测现有字体每个字形都有侧边距（advance = bbox宽 + 22，152/152）。
-    给新字形定 advance 时必须带上它，否则新字会比原字排得更紧。
+    新版字体：advance 恒为 2048 = upm（CJK 等宽方格），lsb = xMin。
+    旧版字体（.bak）：advance 逐字不同（墨迹宽 + 约 22），lsb 恒为 0。
+    两者给新字形定 advance 的方式不同，所以这里探测一下。
     """
-    from fontTools.pens.boundsPen import BoundsPen
-    diffs = []
-    for cp, gn in cmap.items():
-        bp = BoundsPen(glyph_set)
-        glyph_set[gn].draw(bp)
-        if bp.bounds:
-            diffs.append(hmtx[gn][0] - (bp.bounds[2] - bp.bounds[0]))
-    if not diffs:
-        return 22
-    diffs.sort()
-    return diffs[len(diffs) // 2]
+    advs = {hmtx[gn][0] for gn in cmap.values() if gn in hmtx}
+    return len(advs) == 1 and next(iter(advs)) == upm
 
 
 def main():
@@ -241,6 +253,8 @@ def main():
             sys.exit(f'{label}不存在: {p}')
 
     from fontTools.ttLib import TTFont
+    import numpy as _np
+    from PIL import Image as _Image
 
     t0 = time.perf_counter()
     pua_start = int(args.pua_start, 0)
@@ -252,13 +266,14 @@ def main():
     cmap = font.getBestCmap() or {}          # {码点: 字形名}
     hmtx = font['hmtx'].metrics
     units_per_em = font['head'].unitsPerEm
-    side_bearing = measure_side_bearing(glyph_set, cmap, hmtx)
+    # 新版字体 advance 统一 = unitsPerEm、lsb = xMin；旧版是「墨迹宽+22、lsb=0」
+    uniform_adv = detect_uniform_advance(cmap, hmtx, units_per_em)
 
     groups = scan_pngs(args.images_dir)
     n_png = sum((1 if g['main'] else 0) + len(g['variants']) for g in groups.values())
     print(f'基础字体  : {os.path.abspath(args.base_ttf)}')
     print(f'  已有字形: {len(font.getGlyphOrder()):,} (unitsPerEm={units_per_em}, '
-          f'侧边距 {side_bearing})')
+          f'{"advance 统一" if uniform_adv else "advance 逐字不同（旧版字体）"})')
     print(f'素材目录  : {os.path.abspath(args.images_dir)}')
     print(f'  PNG {n_png:,} 张 → {len(groups):,} 个码点，'
           f'其中 {sum(1 for g in groups.values() if g["variants"]):,} 个码点有变体')
@@ -280,43 +295,37 @@ def main():
 
         # --- 主字形 ---
         if main_name is None:
-            # base 里没有这个字（补字后新增）→ 用它自己的 PNG 矢量化 + 等比装箱定位
+            # base 里没有这个字（补字后新增）→ 用它自己的 PNG 矢量化（同一套画布映射）
             if not g['main']:
                 n_skip += 1
                 continue
-            from PIL import Image
-            import numpy as np
-            a = np.asarray(Image.open(g['main']).convert('L'))
-            bw = (a < 128).astype(np.uint8)
+            a = _np.asarray(_Image.open(g['main']).convert('L'))
+            bw = (a < 128).astype(_np.uint8)
             src_bbox = mask_bbox(bw)
             if src_bbox is None:
                 n_skip += 1
                 continue
             cache[g['main']] = (bw, src_bbox)
-            dst_bbox = fit_box_bbox(src_bbox)
-            gl, np_ = vectorize(g['main'], dst_bbox, args.epsilon, cache)
+            _kx, _ox, _ky, _oy = canvas_transform(a.shape[1], a.shape[0], units_per_em)
+            gl, np_, _xm = vectorize(g['main'], _kx, _ox, _ky, _oy, a.shape[0],
+                                     args.epsilon, cache)
             if gl is None:
                 n_skip += 1
                 continue
             main_name = f'uni{cp:04X}' if cp <= 0xFFFF else f'u{cp:05X}'
             new_glyphs[main_name] = gl
-            main_bbox = dst_bbox        # 新字形的 bbox 已知，不必回读 font
-            main_adv = int(round(dst_bbox[2] - dst_bbox[0])) + side_bearing
-            new_metrics[main_name] = (main_adv, 0)
+            # advance 与 base 一致：新版统一 unitsPerEm；旧版是「墨迹宽 + 侧边距」
+            main_adv = units_per_em if uniform_adv else int(round(src_bbox[2] - src_bbox[0])) + 22
+            new_metrics[main_name] = (main_adv, _xm)
             cmap_add[cp] = main_name
             n_new_main += 1
             pts_new.append(np_)
         else:
-            # 主字形已在 base 里 → 用它的 bbox 当对齐目标、它的 advance 当步进宽度。
-            # 注意 glyph_set 是早先取的快照，看不见本轮新加的字形，所以两条分支分开走。
-            main_bbox = glyph_bbox(font, glyph_set, main_name)
+            # 主字形已在 base 里 → 直接沿用它的 advance（变体必须与它同宽）
             main_adv = hmtx[main_name][0]
 
-        if main_bbox is None:
-            n_skip += 1
-            continue
-
         # --- 变体 ---
+        # 与主字形用**同一个画布变换**，所以位置天然对齐，无需按 bbox 对齐
         variants = g['variants']
         if args.limit_variants:
             variants = variants[:args.limit_variants]
@@ -324,15 +333,17 @@ def main():
         for idx, path in variants:
             if next_pua > PUA_END:
                 sys.exit(f'PUA 码点用尽（{PUA_END:#06x}）—— 变体太多或 --pua-start 太靠后')
-            gl, np_ = vectorize(path, main_bbox, args.epsilon, cache)
+            _a = _np.asarray(_Image.open(path).convert('L'))
+            gl, np_, xm = vectorize(path, *_canvas_of(_a, units_per_em),
+                                    _a.shape[0], args.epsilon, cache)
             if gl is None:
                 n_skip += 1
                 continue
             name = f'uni{next_pua:04X}' if next_pua <= 0xFFFF else f'u{next_pua:05X}'
             new_glyphs[name] = gl
-            # advance 必须与主字形**完全相同**（= bbox宽 + 侧边距），
-            # 否则变体多的段落会比纯主字形的段落排得更紧
-            new_metrics[name] = (main_adv, 0)
+            # advance 必须与主字形**完全相同**，否则变体多的段落会比纯主字形的段落更紧。
+            # lsb 必须 = xMin：FreeType/PIL 按 lsb 定位，恒填 0 会让字形整体左移 xMin。
+            new_metrics[name] = (main_adv, xm)
             cmap_add[next_pua] = name
             vmap.setdefault(ch, {'main': f'U+{cp:04X}', 'variants': []})
             vmap[ch]['variants'].append(f'U+{next_pua:04X}')
