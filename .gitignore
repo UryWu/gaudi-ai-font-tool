@@ -20,10 +20,16 @@ font/*.jpeg
 font/*.png
 font/my_personal_font*.ttf
 font/my_personal_font*.bak
+font/my_personal_font_variants.ttf
+font/variant_map.json
+font/fontlab_merged.csv
 font/my_font*
 
 # 临时文件和输出
 temp/
+
+# 字频/书写清单（每跑一次 scripts/char_freq.py / make_write_list.py 就重生成一次，不入仓）
+书写清单*.csv
 *.log
 
 # 系统文件
