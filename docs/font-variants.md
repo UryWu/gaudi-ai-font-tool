@@ -8,15 +8,15 @@
 
 ## 1. 问题：变体在 PNG→TTF 这一步被丢掉
 
-实测素材（`gaudi-font-preprocess` 导出，会话 `c556f452` 的 `20260912_172216`）：
+实测素材（`gaudi-font-preprocess` 合并目录 `data/sessions/all_characters`，5 个会话 × 3121 PNG）：
 
 | | 数量 |
 |---|---|
-| PNG 总数 | **741** |
-| 唯一字符 | **191** |
-| 有多种写法的字符 | **187** |
-| 因此多出来的写法 | **550** |
-| 合成 `my_personal_font.ttf` 后保留 | 191 个字形 —— **550 种写法丢了** |
+| PNG 总数 | **3,121** |
+| 唯一字符 | **1,432** |
+| 有多种写法的字符 | **914** |
+| 因此多出来的写法 | **1,689** |
+| 合成 `my_personal_font.ttf` 后保留 | 1,432 个字形 —— **1,689 种写法丢了** |
 
 变体信息只存在于文件名里（`uniXXXX.png` = 第 1 种，`uniXXXX_01.png` = 第 2 种…），
 代码路径（`utils/import_images.py:_scan_images_dir`）的正则一律带 `(?:_\d+)?`，**会把序号丢掉**。
@@ -124,7 +124,7 @@ python - <<'PY'
 from fontTools.ttLib import TTFont
 base, new = TTFont('font/my_personal_font.ttf'), TTFont('/tmp/v.ttf')
 bm, nm = base.getBestCmap(), new.getBestCmap()
-assert len(nm) == len(bm) + 550          # cmap 191 → 741
+assert len(nm) == len(bm) + 1689         # cmap 1432 → 3121
 assert new['head'].unitsPerEm == base['head'].unitsPerEm
 # 主字形轮廓必须逐指令一致（零损失）
 from fontTools.pens.recordingPen import RecordingPen
@@ -140,23 +140,24 @@ PY
 再跑一次 `make_variant_text.py`（同 seed 两次输出字节应相同），把新字体丢进
 `handwriter v2.0\fonts\` 出一页图肉眼确认。
 
-**已有实测结果**（用会话 `c556f452` 的 741 张素材）：
+**已有实测结果**（用 3121 张合并素材）：
 
 | 检查项 | 结果 |
 |---|---|
-| cmap 条目 | 191 → **741** ✅ |
-| glyph 总数 | 192 → 742 ✅ |
-| 主字形轮廓逐指令一致 | **191 / 191** ✅ |
+| cmap 条目 | 1,432 → **3,121** ✅ |
+| glyph 总数 | 1,433 → 3,122 ✅ |
+| 主字形轮廓逐指令一致 | **1,432 / 1,432** ✅ |
 | 主字形 advance/lsb 变化 | **0** ✅ |
-| 变体 advance = 主字形 advance | **550 / 550** ✅ |
-| 变体 lsb = xMin | **550 / 550** ✅ |
-| 变体渲染回图 IoU（vs 源 PNG）| 中位 **0.956**；4/550 个字（笔画密的）低至 0.850，经查是细笔画缩放损失，非错位 |
-| 主字形墨迹/源图墨迹 | **0.807** —— 与我的变体（0.807）**完全一致**，证明矢量化质量与基准流程相当 |
+| 变体 advance = 主字形 advance | **1,689 / 1,689** ✅ |
+| 变体 lsb = xMin | **1,689 / 1,689** ✅ |
+| 文档覆盖（思想汇报）| 1,296 汉字中 1,277 = **98.53%**（剩 19 个未在素材中）|
+| 文档覆盖（心得+申请书）| 826 汉字中 814 = **98.55%** |
 
 > ⚠️ **字体可能被重新生成**：`font/my_personal_font.ttf` 由 `gaudi-font-preprocess` 侧
-> 维护（命令见其 `scripts/build_personal_ttf.py`）。2026-09-12 一天内就重做了 3 次
-> （修度量、再去掉字形上下颠倒的 bug、最后换用更大的导出批次）。
-> **每次重做后本节的标定常量（`CANVAS_SCALE` 等）与上面的断言数字都要重新核对。**
+> 维护（命令见其 `scripts/build_personal_ttf.py`；本项目内已拷入包装版
+> `scripts/build_personal_ttf.py`，可直接本地重建）。
+> 每次重做后本节的标定常量（`CANVAS_SCALE` 等）与上面的断言数字都要重新核对。
+> 详情见 [merge-2026-09-14.md](merge-2026-09-14.md)。
 
 ## 7. 完整工作流
 

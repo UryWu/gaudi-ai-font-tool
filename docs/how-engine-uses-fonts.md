@@ -20,7 +20,7 @@
 
 | 格式 | 内容 | 你手上有吗 |
 |------|------|-----------|
-| **`.png`** | 位图（像素） | ✅ 318 张 `uniXXXX[_NN].png`，512×512 RGB |
+| **`.png`** | 位图（像素） | ✅ 3121 张 `uniXXXX[_NN].png`，512×512 RGB（5 个会话合并，见 [merge-2026-09-14.md](merge-2026-09-14.md)） |
 | **`.ttf`** | 矢量轮廓 + cmap | ❌ 还没有 |
 
 ### 怎么合成 TTF
@@ -71,7 +71,7 @@ fb.save("我的字库.ttf")
 | 1 | `utils/import_images.py` 的 `assemble_composites()` 签名里**没有 `ref_font` 参数**：`images_dir, source_font, output_data_dir, resolution, ref_size, ref_chars, max_chars, invert` |
 | 2 | `config.jsonc` 的 `"refFont"` 是**空的** |
 | 3 | `train_manager.prepare_data_from_images()` 的 docstring 自己写着「直接用外部已标好的 PNG 拼复合图（**不走 ref_font 渲染**）」|
-| 4 | 逐像素比对：**318/318** 张复合图的 target 通道与 `imagesDir` 里对应的 PNG **完全一致**；8 格 ref 网格也**全部唯一匹配到个人字迹 PNG**，无系统字体残留 |
+| 4 | 逐像素比对：**318/318** 张复合图的 target 通道与 `imagesDir` 里对应的 PNG **完全一致**（当时是 318 张；合并后变 3121 张、原理不变）；8 格 ref 网格也**全部唯一匹配到个人字迹 PNG**，无系统字体残留 |
 
 `001_font/{序号}_{字}.png` 逐段来源：
 
@@ -89,6 +89,11 @@ fb.save("我的字库.ttf")
 **顺带（同一次扫描）**：318 个样本 = **152 个唯一字形**，其中 50 个字被重复书写，多出 166 个实例
 （的×25、党×13、，×13、中×12、国×11…）。重复只让个别字学得更牢，**不扩大字形覆盖面** ——
 有效唯一字形仍只有 152 个。
+
+> ⚠️ **2026-09-14 更新**：上述数字反映单次会话的状态，已过时。
+> 现在 `data/sessions/all_characters/` 合并了 5 个会话：**3,121 张 PNG / 1,432 个字根本位 / 914 个字有变体**。
+> 重复样本从单字平均 1.4 份涨到 2.2 份，**有效字形覆盖面扩大 9.4 倍**。
+> 详见 [merge-2026-09-14.md](merge-2026-09-14.md)。
 
 ---
 
