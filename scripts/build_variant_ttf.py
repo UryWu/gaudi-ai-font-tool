@@ -255,6 +255,9 @@ def main():
     ap.add_argument('--pua-start', default='0xE000', help='PUA 起始码点（默认 0xE000）')
     ap.add_argument('--limit-variants', type=int, default=0,
                     help='每个字最多取前 N 个变体（0 = 全部）')
+    ap.add_argument('--exclude', nargs='*', default=[],
+                    help='排除某些字符（用 unicode 码点表示，如 0x4E2D 0x9E0D），'
+                         '不去碰源 PNG，仅在读入时跳过。常用于排除质量差的字形')
     args = ap.parse_args()
 
     if os.path.abspath(args.out) == os.path.abspath(args.base_ttf):
@@ -298,8 +301,14 @@ def main():
     n_new_main = n_var = n_skip = 0
     pts_new, pts_var = [], []
     next_pua = pua_start
+    excluded = set(int(x, 0) for x in args.exclude) if args.exclude else set()
+    if excluded:
+        print(f"排除字符（--exclude）: {len(excluded)} 个 = {sorted(hex(c) for c in excluded)}")
 
     for cp in sorted(groups):
+        if cp in excluded:
+            n_skip += 1
+            continue
         g = groups[cp]
         ch = chr(cp)
         main_name = cmap.get(cp)

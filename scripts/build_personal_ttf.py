@@ -65,6 +65,9 @@ def parse_args(argv=None):
                      help="配合 --session 指定具体导出批次（时间戳目录名）；默认取最新的一次")
     src.add_argument("--data-dir", default=None,
                      help="会话数据根目录，默认 <项目根>/data/sessions")
+    src.add_argument("--exclude", nargs='*', default=[],
+                     help="排除某些字符（用 unicode 码点表示，如 0x4E2D 0x9E0D），"
+                          "不去碰 preprocess 的源 PNG，仅在读入时跳过。常用于排除质量差的字形")
 
     out = p.add_argument_group("输出")
     # ★ 默认值改为本项目字体路径
@@ -276,7 +279,13 @@ def main(argv=None):
     cmap = {0: ".notdef"}
 
     skipped = []
+    excluded = set(int(x, 0) for x in args.exclude) if args.exclude else set()
+    if excluded:
+        print(f"排除字符（--exclude）: {len(excluded)} 个 = {sorted(hex(c) for c in excluded)}")
     for cp, path in entries:
+        if cp in excluded:
+            skipped.append(os.path.basename(path) + ' [excluded]')
+            continue
         name = glyph_name(cp)
         mask = load_ink_mask(path, args.ink)
         glyph = build_glyph(mask, upm, canvas_units, baseline_pad)

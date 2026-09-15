@@ -125,7 +125,7 @@ def build_list(doc_paths, font_chars, limit=0, uniform=0, exclude=None):
     Args:
         doc_paths: 一到多篇文档；多篇时字频**合并累计**（同一字在多篇里的出现次数相加）
         font_chars: 字库已有字符（排除）
-        exclude: 额外要排除的字符（如已排进其他书写清单的字）
+        exclude: set[str|int] — 字符或码点都行，函数内统一转码点
 
     Returns: [(char, codepoint, category, count, variants), ...]
     """
@@ -134,7 +134,13 @@ def build_list(doc_paths, font_chars, limit=0, uniform=0, exclude=None):
         text, _enc = read_text(p)
         freq.update(text)          # 多篇合并计数（出现次数相加）
 
-    skip = set(font_chars) | set(exclude or ())
+    if exclude:
+        cps = set()
+        for x in exclude:
+            cps.add(x if isinstance(x, int) else ord(x))
+    else:
+        cps = set()
+    skip = set(font_chars) | {chr(cp) for cp in cps}
     scope = [c for c in freq if classify(c) in FONT_SCOPE]
     scope.sort(key=lambda c: (-freq[c], ord(c)))
     missing = [c for c in scope if c not in skip]
@@ -149,15 +155,19 @@ def build_list(doc_paths, font_chars, limit=0, uniform=0, exclude=None):
             for c in missing]
 
 
-def build_written_list(images_dir, uniform=0):
+def build_written_list(images_dir, uniform=0, exclude=None):
     """--images-dir 模式：统计**已经写好**的字形（从素材 PNG 目录）
 
     与 build_list 的区别：这里不是「算出还缺什么」，而是「盘点已经写了什么」。
     每个字实际写了几种 = 该字在目录里的 PNG 张数（`uniXXXX.png` + `uniXXXX_NN.png`…）。
     PNG 文件名里带 `_NN` 的就是变体序号（见 docs/font-variants.md）。
 
+    Args:
+        exclude: set[int] — 要排除的码点（与 --exclude 对齐）。
+
     Returns: [(char, codepoint, category, png_count, variants, filenames), ...]
     """
+    excluded = exclude or set()
     pat = re.compile(r'^u(?:ni)?([0-9A-Fa-f]{4,6})(?:_(\d+))?\.png$')
     per_char = {}
     for name in sorted(os.listdir(images_dir)):
@@ -165,6 +175,8 @@ def build_written_list(images_dir, uniform=0):
         if not m:
             continue
         cp = int(m.group(1), 16)
+        if cp in excluded:
+            continue
         per_char.setdefault(cp, []).append(name)
     # 按 PNG 张数降序（= 写得最多的字在前），同数按码点升序
     items = []
@@ -193,13 +205,16 @@ def main():
                     help='只取优先级最高的前 N 个字（0 = 全部；数字 0-9 不受此限制）')
     ap.add_argument('--uniform', type=int, default=0,
                     help='每个字强制写这么多种（0 = 用字频分档）')
+    ap.add_argument('--exclude', nargs='*', default=[],
+                    help='排除某些字符（用 unicode 码点，如 0x4E2D）。与 build_personal_ttf.py / '
+                         'build_variant_ttf.py 的 --exclude 对齐——保证三者排除集一致')
     args = ap.parse_args()
 
     # ---- 盘点模式：统计已写字形 ----
     if args.images_dir:
         if not os.path.isdir(args.images_dir):
             sys.exit(f'素材目录不存在: {args.images_dir}')
-        written = build_written_list(args.images_dir)
+        written = build_written_list(args.images_dir, exclude=set(int(x,0) for x in args.exclude) if args.exclude else None)
         with open(args.out, 'w', encoding='utf-8-sig', newline='') as f:
             wr = csv.writer(f)
             wr.writerow(['priority', 'char', 'unicode', 'category',
@@ -227,6 +242,10 @@ def main():
             sys.exit(f'文档不存在: {p}')
 
     exclude = set()
+    for cp_str in (args.exclude or []):
+        exclude.add(int(cp_str, 0))
+    if args.exclude:
+        print(f'命令行排除  : {len(exclude):,} 字')
     for pattern in (args.exclude_csv or []):
         # 支持通配符：--exclude-csv "书写清单*.csv" 可一次排除全部历史清单
         matched = sorted(glob.glob(pattern)) if any(c in pattern for c in '*?[') else [pattern]
@@ -244,6 +263,12 @@ def main():
 
     items = build_list(args.doc, load_font_chars(args.font),
                        args.limit, args.uniform, exclude)
+
+    if not items:
+        print(f'★ 需补字 = 0: 该文档已全部覆盖（结合 --font / --exclude-csv / --exclude）')
+        print(f'  不写入空文件 {args.out}')
+        # 不写文件, 避免出现 "0 行" 的空 CSV 干扰清单流水线
+        return
 
     with open(args.out, 'w', encoding='utf-8-sig', newline='') as f:
         wr = csv.writer(f)
