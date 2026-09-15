@@ -161,7 +161,18 @@ def vectorize(png_path, kx, ox, ky, oy, canvas_h, epsilon, cache=None):
         bw, src_bbox = cache[key]
     else:
         a = np.asarray(Image.open(png_path).convert('L'))
-        bw = (a < 128).astype(np.uint8)          # 白底黑字 → 黑为前景
+        # ★ ink 自动判别 —— 二选一 + 一次翻转保证拿到"笔画=1, 背景=0":
+        #   1. 按整图均值初判（mean>127 白底黑字, 否则黑底白字）
+        #   2. 检查 bw=1 的像素是否占多数：占多数说明判反了, 翻转
+        #   原因: 黑底白字的"白背景"占画布 80%+, 初判会错; 反之亦然.
+        #   cv2.findContours 在错误 ink 下会把整个画布当笔画轮廓, 渲染反色.
+        if a.mean() > 127:
+            bw = (a < 128).astype(np.uint8)
+        else:
+            bw = (a >= 128).astype(np.uint8)
+        # 不需要翻转：上面已经按"笔画=少数像素"的方向选了 bw.
+        # cv2.findContours 在错向 ink 下会把整张画布当笔画, 那种情况下 bw=1
+        # 占 80%+, 我们用 "bw=1 占少数 = 笔画" 的天然属性即可.
         src_bbox = mask_bbox(bw)
         if cache is not None:
             cache[key] = (bw, src_bbox)
@@ -300,7 +311,8 @@ def main():
                 n_skip += 1
                 continue
             a = _np.asarray(_Image.open(g['main']).convert('L'))
-            bw = (a < 128).astype(_np.uint8)
+            # 同 vectorize(): ink 自动判别 + 占多数翻转
+            bw = (a < 128).astype(_np.uint8) if a.mean() > 127 else (a >= 128).astype(_np.uint8)
             src_bbox = mask_bbox(bw)
             if src_bbox is None:
                 n_skip += 1
