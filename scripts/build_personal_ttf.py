@@ -68,6 +68,10 @@ def parse_args(argv=None):
     src.add_argument("--exclude", nargs='*', default=[],
                      help="排除某些字符（用 unicode 码点表示，如 0x4E2D 0x9E0D），"
                           "不去碰 preprocess 的源 PNG，仅在读入时跳过。常用于排除质量差的字形")
+    src.add_argument("--exclude-file", nargs='*', default=[],
+                     help="排除某些**源文件**（按文件名，如 uni4E2D.png）。"
+                          "只跳过那一张图，该字的其它样本（uni4E2D_01.png 等）仍会被收录 —— "
+                          "「某个字的第一张写坏了」时用这个，而不是 --exclude（那会整字丢掉）")
 
     out = p.add_argument_group("输出")
     # ★ 默认值改为本项目字体路径
@@ -140,16 +144,23 @@ def resolve_export_dir(args):
     return os.path.join(exported, chosen)
 
 
-def collect_entries(export_dir):
+def collect_entries(export_dir, exclude_files=None):
     """
     扫描导出目录，返回 [(码点, 图片路径)]，同码点只保留第一张。
 
     排序后遍历，保证 `uni7684.png` 排在 `uni7684_01.png` 之前 —— 也就是取
     「无后缀那张」（同字多样本里的第一张）。
+
+    exclude_files: 要跳过的源文件名集合（如 {"uni4E2D.png"}）。
+        跳过后该码点的「第一张」会落到下一张样本（如 uni4E2D_01.png）——
+        用于「某字的第一张写坏了，但其它张是好的」这种情况。
     """
+    excluded = set(exclude_files or ())
     seen = set()
     entries = []
     for fn in sorted(os.listdir(export_dir)):
+        if fn in excluded:
+            continue
         m = NAME_PATTERN.match(fn)
         if not m:
             continue
@@ -263,7 +274,9 @@ def main(argv=None):
     args = parse_args(argv)
 
     export_dir = resolve_export_dir(args)
-    entries = collect_entries(export_dir)
+    if args.exclude_file:
+        print(f"排除源文件（--exclude-file）: {len(args.exclude_file)} 个 = {args.exclude_file}")
+    entries = collect_entries(export_dir, args.exclude_file)
     if not entries:
         sys.exit(f"错误：目录里没找到 uniXXXX.png / uXXXXX.png → {export_dir}")
     print(f"输入目录：{export_dir}")

@@ -155,7 +155,7 @@ def build_list(doc_paths, font_chars, limit=0, uniform=0, exclude=None):
             for c in missing]
 
 
-def build_written_list(images_dir, uniform=0, exclude=None):
+def build_written_list(images_dir, uniform=0, exclude=None, exclude_files=None):
     """--images-dir 模式：统计**已经写好**的字形（从素材 PNG 目录）
 
     与 build_list 的区别：这里不是「算出还缺什么」，而是「盘点已经写了什么」。
@@ -168,9 +168,12 @@ def build_written_list(images_dir, uniform=0, exclude=None):
     Returns: [(char, codepoint, category, png_count, variants, filenames), ...]
     """
     excluded = exclude or set()
+    bad_files = set(exclude_files or ())
     pat = re.compile(r'^u(?:ni)?([0-9A-Fa-f]{4,6})(?:_(\d+))?\.png$')
     per_char = {}
     for name in sorted(os.listdir(images_dir)):
+        if name in bad_files:
+            continue
         m = pat.match(name)
         if not m:
             continue
@@ -208,13 +211,20 @@ def main():
     ap.add_argument('--exclude', nargs='*', default=[],
                     help='排除某些字符（用 unicode 码点，如 0x4E2D）。与 build_personal_ttf.py / '
                          'build_variant_ttf.py 的 --exclude 对齐——保证三者排除集一致')
+    ap.add_argument('--exclude-file', nargs='*', default=[],
+                    help='排除某些**源文件**（按文件名，如 uni4E2D.png）。'
+                         '只跳过那一张图，该字的其它样本仍计入——'
+                         '与 build_personal_ttf.py / build_variant_ttf.py 的 --exclude-file 对齐')
     args = ap.parse_args()
 
     # ---- 盘点模式：统计已写字形 ----
     if args.images_dir:
         if not os.path.isdir(args.images_dir):
             sys.exit(f'素材目录不存在: {args.images_dir}')
-        written = build_written_list(args.images_dir, exclude=set(int(x,0) for x in args.exclude) if args.exclude else None)
+        written = build_written_list(
+            args.images_dir,
+            exclude=set(int(x, 0) for x in args.exclude) if args.exclude else None,
+            exclude_files=args.exclude_file or None)
         with open(args.out, 'w', encoding='utf-8-sig', newline='') as f:
             wr = csv.writer(f)
             wr.writerow(['priority', 'char', 'unicode', 'category',

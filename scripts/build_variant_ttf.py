@@ -83,14 +83,22 @@ PUA_START, PUA_END = 0xE000, 0xF8FF
 PNG_RE = re.compile(r'^u(?:ni)?([0-9A-Fa-f]{4,6})(?:_(\d+))?\.png$')
 
 
-def scan_pngs(images_dir):
+def scan_pngs(images_dir, exclude_files=None):
     """扫描素材目录，按码点分组：{codepoint: {'main': path|None, 'variants': [(idx, path)]}}
 
     注意不能复用 utils/import_images._scan_images_dir()：它的三级解析正则全部是
     `(?:_\\d+)?`，**会丢掉变体序号** —— 而变体序号正是本脚本必须的信息。
+
+    exclude_files: 要跳过的源文件名集合（如 {"uni4E2D.png"}）。
+        跳过 base 那张后 main 会变 None —— 此时该字的**主字形由 --base-ttf 提供**
+        （build_personal_ttf.py 会把下一张 _01 当第一张收录），
+        本脚本只负责把这个字剩余的样本挂成 PUA 变体。
     """
+    excluded = set(exclude_files or ())
     groups = defaultdict(lambda: {'main': None, 'variants': []})
     for name in sorted(os.listdir(images_dir)):
+        if name in excluded:
+            continue
         m = PNG_RE.match(name)
         if not m:
             continue
@@ -258,6 +266,10 @@ def main():
     ap.add_argument('--exclude', nargs='*', default=[],
                     help='排除某些字符（用 unicode 码点表示，如 0x4E2D 0x9E0D），'
                          '不去碰源 PNG，仅在读入时跳过。常用于排除质量差的字形')
+    ap.add_argument('--exclude-file', nargs='*', default=[],
+                    help='排除某些**源文件**（按文件名，如 uni4E2D.png）。'
+                         '只跳过那一张图，该字的其它样本仍会被收录 —— '
+                         '「某个字的第一张写坏了」时用这个，而不是 --exclude（那会整字丢掉）')
     args = ap.parse_args()
 
     if os.path.abspath(args.out) == os.path.abspath(args.base_ttf):
@@ -283,7 +295,9 @@ def main():
     # 新版字体 advance 统一 = unitsPerEm、lsb = xMin；旧版是「墨迹宽+22、lsb=0」
     uniform_adv = detect_uniform_advance(cmap, hmtx, units_per_em)
 
-    groups = scan_pngs(args.images_dir)
+    if args.exclude_file:
+        print(f"排除源文件（--exclude-file）: {len(args.exclude_file)} 个 = {args.exclude_file}")
+    groups = scan_pngs(args.images_dir, args.exclude_file)
     n_png = sum((1 if g['main'] else 0) + len(g['variants']) for g in groups.values())
     print(f'基础字体  : {os.path.abspath(args.base_ttf)}')
     print(f'  已有字形: {len(font.getGlyphOrder()):,} (unitsPerEm={units_per_em}, '
