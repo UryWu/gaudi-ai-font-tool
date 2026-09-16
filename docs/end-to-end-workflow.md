@@ -36,11 +36,17 @@
    - 同一原稿换 --seed 得到不同副本 (随机选 PUA 变体)
   ↓
 【6】用副本出图 (handwriter)
-   - 把 *.ttf 拷到 G:\...\handwriter\fonts\
-   - 启动 handwriter v2.0
-   - 字体选 "我的书法 变体" (my_personal_font_variants.ttf)
-   - 加载**渲染副本.txt** (不是原稿)
-   - 渲染出图
+   - **不要**手拷字体到 handwriter/fonts/ (会污染 handwriter 仓, 且 .gitignore 屏蔽)
+   - 由**用户**用 handwriter 提供的 `install_external_font.ps1` 注册 (路径引用, 不复制):
+     ```powershell
+     cd G:\Projects\projects_ai\handwriter
+     .\install_external_font.ps1 -Path "G:\...\gaudi-ai-font-tool\font\my_personal_font_variants.ttf" -Kind variant -Name "我的书法 (变体)"
+     .\install_external_font.ps1 -Path "G:\...\gaudi-ai-font-tool\font\my_personal_font.ttf" -Kind normal -Name "我的书法 (主字形)"
+     ```
+   - 注册表位置: `handwriter\Parameter\external_fonts.json` (只记录路径, 不复制)
+   - 启动 handwriter v2.0 → 字体下拉看到 `[变体] 我的书法 (变体)` → 选它
+   - 加载**渲染副本.txt** (不是原稿) → 渲染出图
+   - 字体文件始终留在 `gaudi-ai-font-tool/font/` (已 .gitignore, 不进任何仓库)
 ```
 
 ## 典型路径
