@@ -81,9 +81,9 @@ python scripts/make_write_list.py --font font/my_personal_font.ttf \
 python scripts/make_variant_text.py 原稿.txt --map font/variant_map.json \
     --out 渲染副本.txt --seed 42
 
-# 6. 拷给 handwriter
-cp font/my_personal_font.ttf font/my_personal_font_variants.ttf \
-   G:\...\handwriter\fonts\
+# 6. 注册给 handwriter（★ 不要 cp 到 handwriter/fonts/ —— 见上面第 6 步的说明）
+cd G:\Projects\projects_ai\handwriter
+.\install_external_font.ps1 -Path "G:\...\gaudi-ai-font-tool\font\my_personal_font_variants.ttf" -Kind variant -Name "我的书法 (变体)"
 
 # 7. 启动 handwriter v2.0 → 选字体 "我的书法 变体" → 加载渲染副本.txt → 渲染
 ```
@@ -146,7 +146,15 @@ build_personal_ttf.py 用「按列扫描矩形」法, 1-像素宽矩形在 96pt 
 
 `check_glyph_render.py` 默认阈值已调到 50, 能拦住。但**阈值不是万能的**, 重要交付前一定要出图肉眼检查。
 
-### 5. 半角 vs 全角标点
+### 5. ★ PUA 码点每次 rebuild 都会变（副本必须重生成）
+
+PUA 是「按码点升序连续编号」，所以**任何一个字根增删一张 PNG，它后面的所有字全部前移**。
+实测：删掉「上」的一张错图后，「这」的变体从 `U+E64C/E64D/E64E` 变成 `U+E64B/E64C/E64D`。
+
+**后果**：rebuild 之前生成的 `渲染副本.txt` 里的 PUA 码点会**渲成别的字**（而且不报错，静默错）。
+**规矩**：每次重 build 字体（步骤 4）之后，步骤 5 的渲染副本**必须重新生成**，不要复用旧的。
+
+### 6. 半角 vs 全角标点
 
 用户文档里 `?` `!` **实际是全角** (U+FF1F, U+FF01), 不是半角 (U+003F, U+0021)。
 preprocess / 用户补字时**按文档实际使用形式补** (你的文档用什么就补什么)。
@@ -155,11 +163,15 @@ preprocess / 用户补字时**按文档实际使用形式补** (你的文档用�
 
 | | 数 |
 |---|---|
-| 字体字符数 | **1462** |
-| 变体数 | **1707** PUA |
+| 字体字符数 | **1463** |
+| PNG 素材 | **3210** 张 |
+| 有变体的字根 | **926** 个 |
+| 变体数 | **1748** PUA（占用 1748 / 6400）|
 | 覆盖率 (思想汇报) | **100%** (0 待补字) |
 | 覆盖率 (心得+申请书) | **100%** (0 待补字) |
-| 缺的符号 (不在合并目录里) | `% + ÷` (用户文档里 0 次, 不影响) |
+
+> 数据截至 2026-09-17（dev 删掉 `uni4E0A_04.png` 后的重建版本）。
+> `%` `+` `÷` 已在第四轮补全，不再缺失。
 
 ## 流程图 (角色视角)
 
