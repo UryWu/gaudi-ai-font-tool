@@ -1,0 +1,111 @@
+# TTF 渲染空白诊断与修复（2026-09-16）
+
+> 背景：用户报告 font/my_personal_font.ttf 里部分字形在 PIL 默认 mode='L' 下渲染成空白。
+> 本文档是诊断过程和修复方案的记录，方便后续查阅。
+
+## 时间线
+
+| 时间 | 事件 |
+|---|---|
+| 9-15 | 用户新建 12 字形补字（— ’ 等），发现新字渲染空白 |
+| 9-15 22:06 | 12 个字形实测 `PIL getmask(mode='L')` 全部 ink=0 |
+| 9-15 22:30 | **本仓库提交 `check_glyph_render.py`** 体检工具 |
+| 9-15 22:40 | dev 第一次修：用 `cv2.findContours + approxPolyDP`，per-glyph fallback |
+| 9-15 23:00 | dev 自报 17 个 fallback，但实测 "D / o / 8" 变实心黑块、"’" 仍空白 |
+| 9-16 07:00 | dev 二次修：winding 双反转修正 + probe 阈值放宽（ink<50 触发）|
+| 9-16 09:30 | **fallback 命中 571/1457**，全部 0 视觉失败 |
+
+## 根因（两层）
+
+### 第 1 层：FreeType autohint 把"共边矩形"压成零高度
+
+dev 的 `build_personal_ttf.py` 用「按列扫描矩形」算法生成字形轮廓：
+
+```
+对每列 y 区间，生成 4 点矩形: (x_left, y_top, x_right, y_bottom)
+```
+
+相邻矩形**首尾点重合**（x_right = 下一列的 x_left）。
+
+**问题**：FreeType 的自动 hinting 在某些字形上**把这种共边轮廓压成零高度**——导致 `PIL getmask(mode='L')` 返回空 bitmap（ink=0）。
+
+**复现**：换 `FT_LOAD_NO_HINTING` / `FT_LOAD_NO_AUTOHINT` 后立即恢复 ink>0。
+
+### 第 2 层：winding 方向双反转
+
+dev 第一轮修复时同时引入 cv2 fallback，但**注释里**写：
+
+> "OpenCV 在 y-down 坐标下，外轮廓是逆时针遍历的"
+
+这是**错的**——OpenCV（CHAIN_APPROX_NONE）实际外轮廓是**顺时针**、内孔是**逆时针**。
+
+dev 的修复代码：
+
+```python
+# y-flip 把 CW → CCW (外), CCW → CW (内)
+# 然后又对 hole 多做 reversed()  "修正 winding"
+pts = [(x_img, y_img) ...]                 # y-down
+pts = flip_y(pts)                          # y-up
+if is_hole:
+    pts = list(reversed(pts))               # 再翻一次
+```
+
+结果：外轮廓 CCW + reversed CCW = **CW**（不对），洞也类似 —— **TrueType 非零环绕**认为内外同向 → 整字填实心。
+
+dev 第二轮修正：删掉 `reversed(pts)`，让 y-flip 单独处理方向：
+
+| 坐标 | 外轮廓 | 内孔 |
+|---|---|---|
+| OpenCV y-down | CW (signed_area > 0) | CCW (signed_area < 0) |
+| y-flip → y-up | **CCW** | **CW** |
+| TrueType 要 | CCW 或 CW（外） | **必须反向**（内） |
+
+去掉 reversed 后：外 CCW + 内 CW —— 内外反向 ✅。
+
+### 第 3 层：probe 阈值过宽松
+
+dev 的 `probe_glyph_ink()` 之前用 `ink == 0` 触发 fallback。**问题**：
+
+- 封闭轮廓字（a/d/g/p/q/A/O/P/Q/R/0/4/6/9）因 autohint 崩塌，最终字体里渲出 **ink=1~33**（视觉空白但 ink>0）
+- probe 在迷你字体里给 ink>0（fallback 不触发）
+- 修复：`ink < FALLBACK_INK_THRESHOLD(50)` 触发 fallback
+- CJK 实心字（看/中/党/的 等）实测 ink > 500 → 不误伤 ✅
+
+## 最终数字
+
+| 阶段 | fallback 命中 | 0 失败 |
+|---|---:|:---:|
+| 第一轮（ink==0）| 17 | ❌ |
+| 第二轮（winding 双反）| 17 | ❌（实心块）|
+| 第三轮（winding 修 + 阈值放宽）| **571 / 1457** | ✅ |
+
+**取舍**：545 个字符失去了「手写台阶质感」（dev 改用 cv2 轮廓算法），换取 0 个视觉失败。
+
+如果觉得 571 太多，可把 `FALLBACK_INK_THRESHOLD` 上调（如 100/200）—— 但 26（之前实测 12+14）是绝对下限，少于这个一定漏判。
+
+## 我方 (gaudi-ai-font-tool-dev) 的动作
+
+- 提交 `check_glyph_render.py`：能用 `PIL getmask` 一键扫所有字形
+- 给三个脚本加 `--exclude` / `--exclude-file`（之前已提交）
+- **无代码改动需要**：bug 完全在 dev 那边；我方只是把 dev 修好的 TTF 拷过来用
+
+## 给未来自己的提醒
+
+1. **看图判断字形时**：
+   - 用 `font.getmask(ch)` 算 `numpy` 数组 + 看 `fill_ratio = ink / bbox_area`
+   - 不要靠抗锯齿渲染（draw.text）看"暗不暗"判断
+   - `ink == 0` ≠ 字符渲染不出来，可能只是 probe 阈值太严
+
+2. **fallback 阈值调试顺序**：
+   - winding 错（实心块）→ 看 200px 大字号更明显
+   - probe 漏判（空白字）→ 跑 `check_glyph_render.py @ 80px`，看 ink < 50 的字形
+   - **两者必须同时修**——只修一个会暴露另一个
+
+3. **数字核对**：
+   - dev 自报 17，实际命中 26（含原报告的 12 + 我后来补的 14 个封闭轮廓字）
+   - 26 是绝对下限，少于这个一定漏判
+
+4. **远程协作流程**：
+   - dev 修完说"修好了"不能立刻信 —— 必须本地实测 `check_glyph_render.py`
+   - 出图肉眼对照"修复前 vs 修复后"
+   - 这次 winding 错就是 dev 第一次"修好了"我实测才发现的
