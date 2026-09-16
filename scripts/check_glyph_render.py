@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
-"""字形栅格化体检 —— 扫字体每个 char, PIL getmask 检测 ink=0 的
+"""字形栅格化体检 —— 扫字体每个 char, PIL getmask 检测渲染异常
 
-用途: build_personal_ttf.py 的「按列扫描矩形」法偶尔产生 FreeType 拒绝栅格化的字形
-(ink=0 但 glyf 数据看似正常). 此脚本扫描 TTF 里每个字符, 列出所有 ink=0 的,
-让 dev 修完字体后立刻能验.
+用途: 之前用 `ink > 0` 当通过门槛, 但细笔画字符 (如 @ # 看 一)
+会被 build_personal_ttf.py 的列扫描矩形算法产出 1-像素宽矩形,
+96pt 渲染时矩形亚像素, 抗锯齿吃掉 → ink=63/76 但视觉上是散点.
+
+2026-09-16 dev 那边改了 PROBE_SIZE=64, threshold=50.
+本脚本同步升级: 阈值改为 50, 与 dev 的 fallback 阈值对齐, 拦住散点陷阱.
 
 用法:
   python scripts/check_glyph_render.py font/my_personal_font.ttf
   python scripts/check_glyph_render.py font/my_personal_font_variants.ttf
   python scripts/check_glyph_render.py font/my_personal_font.ttf --size 96
+  python scripts/check_glyph_render.py font/my_personal_font.ttf --threshold 100
   python scripts/check_glyph_render.py font/my_personal_font.ttf --output failed.txt
 
 返回:
@@ -24,9 +28,11 @@ from PIL import Image, ImageFont
 
 
 def main():
-    ap = argparse.ArgumentParser(description='扫字体每个字形, 检测 ink=0 (FreeType 拒绝栅格化)')
+    ap = argparse.ArgumentParser(description='扫字体每个字形, 检测渲染异常 (ink 太低=散点/空白)')
     ap.add_argument('ttf', help='TTF 路径')
     ap.add_argument('--size', type=int, default=64, help='PIL 渲染字号 (默认 64)')
+    ap.add_argument('--threshold', type=int, default=50,
+                    help='判定异常的 ink 下限 (默认 50, 与 dev fallback 阈值对齐)')
     ap.add_argument('--output', default='', help='失败清单输出路径 (默认打印到 stdout)')
     ap.add_argument('--exclude', nargs='*', default=[],
                     help='排除某些字符的码点 (十进制 0x 前缀可), 如 0x4E2D 0x9E0D')
@@ -58,10 +64,10 @@ def main():
             ink = int((a > 0).sum())
         except Exception as e:
             ink = -1
-        if ink <= 0:
+        if ink < args.threshold:
             rows.append((cp, ch, gn, ink))
 
-    head = f'=== {os.path.basename(args.ttf)} @ {args.size}px ===\n'
+    head = f'=== {os.path.basename(args.ttf)} @ {args.size}px (threshold={args.threshold}) ===\n'
     head += f'字符数: {len(cm)}, 失败: {len(rows)}, 排除: {len(excluded)}\n'
     print(head, end='')
     if not rows:
