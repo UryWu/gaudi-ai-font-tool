@@ -18,6 +18,37 @@ dev 删了那个甲字 PNG + 历史副本，让 `collect_entries` 按字典序�
 - 之前一直用 `--exclude-file uni4E2D.png` 排的是甲字（实际从来没用"中"的旧图）
 - 现在 base 直接用 `uni4E2D_01.png` 渲染干净的"中"
 
+## ⚠️ 第三轮修复（2026-09-17）："生"字字根错配
+
+5 张 `uni751F*.png` 里有 **3 张内容不对**：
+
+| 文件 | 实际内容 | 状态 |
+|---|---|---|
+| `uni751F.png` | "生" | ✅ 主字形 base |
+| `uni751F_01.png` | "牛" | 用户确认保留（不删）→ PUA U+E4AA 渲染出来是「牛」 |
+| `uni751F_02.png` | "生" | ✅ PUA U+E4AB |
+| `uni751F_03.png` | "牛" | ❌ 删 → PUA U+E4AC |
+| `uni751F_04.png` | "告" | ❌ 删 → PUA U+E4AD |
+
+dev 还顺手扫了 `0e38c7bb` session 里的 `uni751F.png`（内容是"坐"）也删了（不在 `all_characters/` 里，但同名历史副本）。
+
+**当前"生"变体**：只剩 U+E4AA（"牛"）+ U+E4AB（"生"）。
+
+## 字根错配问题通用模式
+
+preprocess 那边**字根码点 ↔ PNG 内容**可能错配：
+- 字根 `uniXXXX.png` 里实际不是 XXXX 对应的字（filename/CSV 说 U+4E2D，内容是甲）
+- 字根 `uniXXXX_NN.png` 里实际也不是 XXXX 对应的字（filename/CSV 说 U+751F_01，内容是牛）
+
+排查流程（**用户视角**）：
+1. 拷 dev 那边的 TTF 过来
+2. 跑 `check_glyph_render.py`（快速筛选 ink 太低）
+3. 出对比图: 选一个有 PUA 变体的字，渲染主字形 + 全部变体，肉眼看哪些不像该字
+4. 把不像的 PNG 名报告给 dev，dev 删源 PNG + 重 build base TTF
+5. 拷新 base → 重 build variant → 再出图确认
+
+代码层**自动检测不现实**（需要识别字形属于哪个字），但**用户目测 + 反馈给 dev**很有效。
+
 ## ⚠️ 仍空白的 5 个字符（不是闭口字母）
 
 dev 第二轮修完后, 我把 26 大小写字母 + 10 数字 + 5 特殊符号全扫了一遍:
